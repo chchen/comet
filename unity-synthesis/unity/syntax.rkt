@@ -3,7 +3,7 @@
 ;; UNITY Syntax
 (struct unity* (declare initially assign) #:transparent)
 
-(struct declare* (variables) #:transparent)
+(struct declare* (ident mode declare) #:transparent)
 (struct initially* (multi-assignment) #:transparent)
 (struct assign* (guarded-assignments) #:transparent)
 
@@ -21,9 +21,13 @@
 
 (provide unity* declare* initially* assign* multi* clause* not* and* or* eq* ref*)
 
-(unity* (declare* (list->vector '('read 'write)))
-        (initially* (multi* '(1) '(#t)))
-        (assign* (clause*
-                  (ref* 0)
-                  (multi* '(1) '((not* (ref* 0))))
-                  null)))
+;; Example syntax
+
+;(unity* (declare* 0 'readwrite
+;                  (declare* 1 'write
+;                            null))
+;        (initially* (multi* '(1) '(#t)))
+;        (assign* (clause*
+;                  (ref* 0)
+;                  (multi* '(1) '((not* (ref* 0))))
+;                  null)))
