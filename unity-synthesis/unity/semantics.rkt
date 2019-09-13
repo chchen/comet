@@ -1,9 +1,7 @@
 #lang rosette
 
-(require "syntax.rkt")
-
-(define (in-list? v l)
-  (ormap (lambda (e) (eq? v e)) l))
+(require "syntax.rkt"
+         "../util.rkt")
 
 (define (eval exp env refs)
   (let ([readenv (car env)])

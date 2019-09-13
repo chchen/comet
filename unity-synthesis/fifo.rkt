@@ -24,7 +24,12 @@
 (define TS
   (synthesize
    #:forall sl
-   #:guarantee (assert (equal? (car (interpret terminalsketch (list->vector sl) '()))
+   #:guarantee (assert (equal? (car (interpret terminalsketch
+                                               (cons '()
+                                                     (cons '(0 1 2 3)
+                                                           '(1 2)))
+                                               (list->vector sl)
+                                               '()))
                                (fifospec (list->vector sl))))))
 
 (evaluate terminalsketch TS)
@@ -36,7 +41,12 @@
 (define GS
   (synthesize
    #:forall sl
-   #:guarantee (assert (equal? (eval guardsketch (list->vector sl) '())
+   #:guarantee (assert (equal? (eval guardsketch
+                                     (cons '()
+                                           (cons '(0 1 2 3)
+                                                 '(1 2)))
+                                     (list->vector sl)
+                                     '())
                                (guardspec (list->vector sl))))))
 
 (evaluate guardsketch GS)
@@ -52,7 +62,12 @@
 (define WS
   (synthesize
    #:forall sl
-   #:guarantee (assert (equal? (car (interpret wholesketch (list->vector sl) '()))
+   #:guarantee (assert (equal? (car (interpret wholesketch
+                                               (cons '()
+                                                     (cons '(0 1 2 3)
+                                                           '(1 2)))
+                                               (list->vector sl)
+                                               '()))
                                (fifospec (list->vector sl))))))
 
 (evaluate wholesketch WS)
@@ -64,19 +79,28 @@
 (define AS
   (synthesize
    #:forall sl
-   #:guarantee (assert (equal? (car (interpret assignsketch (list->vector sl) '()))
+   #:guarantee (assert (equal? (car (interpret assignsketch
+                                               (cons '()
+                                                     (cons '(1) '(0)))
+                                               (list->vector sl)
+                                               '()))
                                (assignspec (list->vector sl))))))
 
 (evaluate assignsketch AS)
 
-;; Can we synthesize entire assignment sequences
+;; Can we synthesize entire assignment sequence
 (define seqsketch
   (stmt?? 1 2))
 
 (define QS
   (synthesize
    #:forall sl
-   #:guarantee (assert (equal? (car (interpret seqsketch (list->vector sl) '()))
+   #:guarantee (assert (equal? (car (interpret seqsketch
+                                               (cons '()
+                                                     (cons '(0 1 2 3)
+                                                           '(1 2)))
+                                               (list->vector sl)
+                                               '()))
                                (actionspec (list->vector sl))))))
 
 (evaluate seqsketch QS)
@@ -88,7 +112,12 @@
 (define PS
   (synthesize
    #:forall sl
-   #:guarantee (assert (equal? (car (interpret progsketch (list->vector sl) '()))
+   #:guarantee (assert (equal? (car (interpret progsketch
+                                               (cons '()
+                                                     (cons '(0 1 2 3)
+                                                           '(1 2)))
+                                               (list->vector sl)
+                                               '()))
                                (fifospec (list->vector sl))))))
 
 (evaluate progsketch PS)

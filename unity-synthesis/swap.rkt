@@ -8,14 +8,17 @@
          rosette/lib/synthax)
 
 ;; Synthesize an equivalent to a multi-assignment swap
+(define unity-env (cons '(0 1) '(0 1)))
+(define arduino-env (cons '(0) (cons '(0 1) '(0 1))))
 
-(define (multi-assign-swap input-state)
+(define (multi-assign-swap env input-state)
   (unity-sem:multi-assign (list 0 1)
                           (list (unity:ref* 1)
                                 (unity:ref* 0))
+                          env
                           input-state))
 
-(multi-assign-swap (list->vector '(#t #f)))
+(multi-assign-swap unity-env (list->vector '(#t #f)))
 
 (define-symbolic left right aux boolean?)
 
@@ -32,8 +35,8 @@
 (define TS
   (synthesize
    #:forall pins
-   #:guarantee (assert (equal? (car (arduino-sem:interpret terminal-sketch (list->vector pins) (list->vector refs)))
-                               (multi-assign-swap (list->vector pins))))))
+   #:guarantee (assert (equal? (car (arduino-sem:interpret terminal-sketch arduino-env (list->vector pins) (list->vector refs)))
+                               (multi-assign-swap unity-env (list->vector pins))))))
 
 (evaluate terminal-sketch TS)
 
@@ -44,8 +47,8 @@
 (define SS
   (synthesize
    #:forall pins
-   #:guarantee (assert (equal? (car (arduino-sem:interpret stmt-sketch (list->vector pins) (list->vector refs)))
-                               (multi-assign-swap (list->vector pins))))))
+   #:guarantee (assert (equal? (car (arduino-sem:interpret stmt-sketch arduino-env (list->vector pins) (list->vector refs)))
+                               (multi-assign-swap unity-env (list->vector pins))))))
 
 (evaluate stmt-sketch SS)
   
