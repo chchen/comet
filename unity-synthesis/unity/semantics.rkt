@@ -3,123 +3,188 @@
 (require "syntax.rkt"
          "../util.rkt")
 
-(define (eval exp env refs)
-  (let ([readenv (car env)])
-    (match exp
-      [(ref* v) (if (in-list? v readenv)
-                    (vector-ref refs v)
-                    'typerr)]
-      [(not* e) (not (eval e env refs))]
-      [(and* l r) (and (eval l env refs)
-                       (eval r env refs))]
-      [(or* l r) (or (eval l env refs)
-                     (eval r env refs))]
-      [(eq* l r) (eq? (eval l env refs)
-                      (eval r env refs))])))
+(define (can-read? v env)
+  (in-list? v (car env)))
+
+(define (can-write? v env)
+  (in-list? v (cdr env)))
+
+(define (evaluate exp env refs)
+  (match exp
+    [(ref* v) (if (can-read? v env)
+                  (vector-ref refs v)
+                  'typerr)]
+    [(not* e) (not (evaluate e env refs))]
+    [(and* l r) (and (evaluate l env refs)
+                     (evaluate r env refs))]
+    [(or* l r) (or (evaluate l env refs)
+                   (evaluate r env refs))]
+    [(eq* l r) (eq? (evaluate l env refs)
+                    (evaluate r env refs))]
+    [#t #t]
+    [#f #f]))
 
 (assert (eq?
          #f
-         (eval (and* (or* (not* (ref* 0))
+         (evaluate (and* (or* (not* (ref* 0))
                           (ref* 1))
                      (eq* (ref* 2)
                           (ref* 3)))
                (cons '(0 1 2 3) null)
-               (list->vector '(#t #f #t #f)))))
+               (list->vector '(#t #f #t #f))))
+        "evaluate-and-eq")
 
 (assert (eq?
          #t
-         (eval (not* (ref* 0))
+         (evaluate (not* (ref* 0))
                (cons '(0) null)
-               (list->vector '(#f)))))
+               (list->vector '(#f))))
+        "evaluate-not-ref")
 
 ;; Initialize the environment
 
 (define (interpret-declare-helper decl read write)
   (match decl
     ['() (cons read write)]
-    [(declare* ident mode tail) (match mode
-                                  ['read (interpret-declare-helper tail
-                                                                   (cons ident read)
-                                                                   write)]
-                                  ['write (interpret-declare-helper tail
-                                                                    read
-                                                                    (cons ident write))]
-                                  ['readwrite (interpret-declare-helper tail
-                                                                        (cons ident read)
-                                                                        (cons ident write))]
-                                  [_ 'typerr])]))
+    [(cons (declare* ident mode) tail)
+     (match mode
+       ['read (interpret-declare-helper tail
+                                        (cons ident read)
+                                        write)]
+       ['write (interpret-declare-helper tail
+                                         read
+                                         (cons ident write))]
+       ['readwrite (interpret-declare-helper tail
+                                             (cons ident read)
+                                             (cons ident write))]
+       [_ 'typerr])]))
 
 (define (interpret-declare decl)
   (interpret-declare-helper decl '() '()))
 
-(interpret-declare (declare* 0 'readwrite
-                             (declare* 1 'write
-                                       (declare* 2 'read
-                                                 null))))
+(assert (equal?
+         (cons (list 2 0) (list 1 0))
+         (interpret-declare (list (declare* 0 'readwrite)
+                                  (declare* 1 'write)
+                                  (declare* 2 'read))))
+        "interpret-declare")
 
-(define (multi-assign-helper vars exps env refs next-refs)
+(define (interpret-multi vars exps env refs next-refs)
   (if (cons? vars)
       (let ([var (car vars)]
-            [exp (car exps)]
-            [writeenv (cdr env)])
-        (if (in-list? var writeenv)
-            (multi-assign-helper (cdr vars) (cdr exps) env refs
-                                 (begin (vector-set! next-refs (car vars) (eval (car exps) env refs))
-                                        next-refs))
+            [exp (car exps)])
+        (if (can-write? var env)
+            (interpret-multi (cdr vars) (cdr exps) env refs
+                             (begin
+                               (vector-set! next-refs
+                                            (car vars)
+                                            (evaluate (car exps)
+                                                      env
+                                                      refs))
+                               next-refs))
             'typerr))
       next-refs))
 
-(define (multi-assign vars exps env refs)
-  (multi-assign-helper vars exps env (vector->immutable-vector refs) refs))
-
 (assert (equal?
          (list->vector '(#f #t #f))
-         (multi-assign (list 0 1 2)
-                       (list (ref* 1)
-                             (ref* 0)
-                             (and* (ref* 1)
-                                   (ref* 2)))
-                       (cons '(0 1 2)
-                             '(0 1 2))
-                       (list->vector '(#t #f #t)))))
+         (let ([refs (list->vector '(#t #f #t))])
+           (let (
+                 [prev (vector->immutable-vector refs)]
+                 [next refs])
+             (interpret-multi (list 0 1 2)
+                              (list (ref* 1)
+                                    (ref* 0)
+                                    (and* (ref* 1)
+                                          (ref* 2)))
+                              (cons '(0 1 2)
+                                    '(0 1 2))
+                              prev
+                              next))))
+        "interpret-multi")
 
-(define (interpret-clause clause env refs)
-  (match clause
-    ['() refs]
-    [(clause* guard
-              (multi* vars exps)
-              tail)
-     (if (eval guard env refs)
-         (multi-assign vars exps env refs)
-         (interpret-clause tail env refs))]))
+(define (filter-guards assignments env refs)
+  (match assignments
+    ['() '()]
+    [(cons (assign* guard multi) tail)
+     (if (evaluate guard env refs)
+         (cons multi (filter-guards tail
+                                    env
+                                    refs))
+         (filter-guards tail env refs))]))
 
-(assert (equal? (list->vector '(#t #f))
-                (interpret-clause (clause* (not* (eq* (ref* 0) (ref* 1)))
-                           (multi* (list 0 1)
+(assert (equal?
+         (list 'A 'B 'C)
+         (filter-guards (list (assign* (ref* 0) 'A)
+                              (assign* (ref* 1) 'B)
+                              (assign* (ref* 2) 'C))
+               (cons '(0 1 2)
+                     '())
+               (list->vector '(#t #t #t))))
+        "filter-guards-t")
+
+(assert (equal?
+         '()
+         (filter-guards (list (assign* (ref* 0) 'A)
+                              (assign* (ref* 1) 'B)
+                              (assign* (ref* 2) 'C))
+               (cons '(0 1 2)
+                     '())
+               (list->vector '(#f #f #f))))
+        "filter-guards-f")
+
+(define (interpret-multis-helper multis env prev next)
+  (match multis      
+    [(cons (multi-assignment* vars exps) tail)
+     (interpret-multis-helper tail
+                              env
+                              prev
+                              (interpret-multi vars
+                                               exps
+                                               env
+                                               prev
+                                               next))]
+    ['() next]))
+
+(define (interpret-initially multi env refs)
+  (let ([prev (vector->immutable-vector refs)]
+        [next refs])
+    (interpret-multi multi env prev next)))
+
+(define (interpret-multis multis env refs)
+  (let ([prev (vector->immutable-vector refs)]
+        [next refs])
+    (interpret-multis-helper multis env prev next)))
+
+(assert (equal?
+         (list->vector '(#t #f #t #f))
+         (interpret-multis
+          (list (multi-assignment* '(0 1)
                                    (list (ref* 1)
                                          (ref* 0)))
-                           (clause* (eq* (ref* 0) (ref* 1))
-                                    (multi* (list 0)
-                                            (list (not* (ref* 0))))
-                                    null))
-                  (cons '(0 1)
-                        '(0 1))
-                  (list->vector '(#f #t)))))
+                (multi-assignment* '(2 3)
+                                   '(#t #f)))
+          (cons '(0 1)
+                '(0 1 2 3))
+          (list->vector '(#f #t #f #t))))
+        "interpret-multis")
 
-(assert (equal? (list->vector '(#t #f))
-                (interpret-clause (clause* (not* (eq* (ref* 0) (ref* 1)))
-                           (multi* (list 0 1)
-                                   (list (ref* 1)
-                                         (ref* 0)))
-                           (clause* (eq* (ref* 0) (ref* 1))
-                                    (multi* (list 1)
-                                            (list (not* (ref* 1))))
-                                    null))
-                  (cons '(0 1)
-                        '(0 1))
-                  (list->vector '(#t #t)))))
+(define (interpret-assign assignments env refs)
+  (let ([multis (filter-guards assignments env refs)])
+    (interpret-multis multis env refs)))
 
-(provide multi-assign interpret-clause)
+(assert (equal?
+         (list->vector '(#t #t #t #t))
+         (interpret-assign (list (assign* (ref* 0)
+                                          (multi-assignment* (list 2)
+                                                             (list #t)))
+                                 (assign* (ref* 1)
+                                          (multi-assignment* (list 3)
+                                                             (list #t))))
+                           (cons '(0 1)
+                                 '(2 3))
+                           (list->vector '(#t #t #f #f))))
+        "interpret-assign")
 
-                                                                                    
-                                                           
+(provide interpret-declare
+         interpret-initially
+         interpret-assign)
