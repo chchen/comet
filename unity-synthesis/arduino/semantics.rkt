@@ -22,8 +22,8 @@
       [(ref* v) (if (in-list? v varenv)
                     (vector-ref refs v)
                     'typerr)]
-      [#t #t]
-      [#f #f])))
+      ['true #t]
+      ['false #f])))
 
 (define-symbolic A B boolean?)
 
@@ -39,6 +39,32 @@
 (define (update! vec key val)
   (vector-set! vec key val)
   vec)
+
+;; Interpretation function for sequences of initialization statements
+(define (interpret-decl declarations)
+  (define (helper decls variables read-pins write-pins)
+    (match decls
+      [(seq* (var* id) tail) (helper tail
+                                     (cons id variables)
+                                     read-pins
+                                     write-pins)]
+      [(seq* (pin-mode* id mode) tail) (helper tail
+                                               variables
+                                               (cons id read-pins)
+                                               (if (eq? mode 'output)
+                                                   (cons id write-pins)
+                                                   write-pins))]
+      ['() (cons variables (cons read-pins write-pins))]))
+
+  (helper declarations '() '() '()))
+
+(assert (equal? (interpret-decl (seq* (var* 'x)
+                                      (seq* (pin-mode* 0 'input)
+                                            (seq* (pin-mode* 1 'output)
+                                                  null))))
+                (cons (list 'x)
+                      (cons (list 1 0)
+                            (list 1)))))
 
 ;; Interpretation function for sequences of statements
 (define (interpret prog env pins refs)
@@ -80,7 +106,7 @@
                 (cons (list->vector '(A))
                       (list->vector '(A)))))
 
-(assert (equal? (interpret (seq* (if* #t
+(assert (equal? (interpret (seq* (if* 'true
                                       (seq* (set!* 0 (read* 0)) null))
                                  null)
                            (cons '(0)
@@ -90,7 +116,7 @@
                 (cons (list->vector '(A))
                       (list->vector '(A)))))
 
-(assert (equal? (interpret (seq* (if* #f
+(assert (equal? (interpret (seq* (if* 'false
                                       (seq* (set!* 0 (read* 0)) null))
                                  null)
                            (cons '(0)
@@ -100,4 +126,6 @@
                 (cons (list->vector '(A))
                       (list->vector '(B)))))
 
-(provide eval interpret)
+(provide eval
+         interpret
+         interpret-decl)

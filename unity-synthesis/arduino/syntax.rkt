@@ -2,8 +2,8 @@
 
 (struct arduino* (setup loop) #:transparent)
 
-(struct setup* (decl init) #:transparent)
-(struct loop* (seq) #:transparent)
+(struct setup* (statements) #:transparent)
+(struct loop* (statements) #:transparent)
 
 ;; Expressions
 (struct and* (left right) #:transparent)
@@ -14,7 +14,7 @@
 (struct read* (pin) #:transparent)
 (struct ref* (var) #:transparent)
 
-;; Setup Statements
+;; Setup-only statements
 (struct var* (ident) #:transparent)
 (struct pin-mode* (pin mode) #:transparent)
 
@@ -26,20 +26,23 @@
 ;; Sequencing
 (struct seq* (left right) #:transparent)
 
-(provide arduino* setup* loop* and* or* eq* neq* not* read* ref* var* pin-mode* write!* set!* if* seq*)
+(define (seq-append left right)
+  (match left
+    [(seq* fst snd) (seq* fst (seq-append snd right))]
+    ['() right]))
+
+(provide arduino* setup* loop* and* or* eq* neq* not* read* ref* var* pin-mode* write!* set!* if* seq* seq-append)
 
 ;; Example syntax
-
-(arduino* (setup* (seq* (var* 0)
-                        (seq* (pin-mode* 0 'input)
-                              (seq* (pin-mode* 1 'output)
-                                    null)))
-                  (seq* (set!* 0 #t)
-                        (seq* (write!* 1 #f)
-                              null)))
-          (loop* (seq* (if* (eq* (read* 0)
-                                 (ref* 0))
-                            (seq* (set!* 0 (not* (ref* 0)))
-                                  (seq* (write!* 1 (not* (read* 1)))
-                                        null)))
-                       null)))
+;; (arduino* (setup* (seq* (var* 'x)
+;;                         (seq* (pin-mode* 0 'input)
+;;                               (seq* (pin-mode* 1 'output)
+;;                                     (seq* (set!* 'x 'true)
+;;                                           (seq* (write!* 1 'false)
+;;                                                 null))))))
+;;           (loop* (seq* (if* (eq* (read* 0)
+;;                                  (ref* 'x))
+;;                             (seq* (set!* 'x (not* (ref* 'x)))
+;;                                   (seq* (write!* 1 (not* (read* 1)))
+;;                                         null)))
+;;                        null)))

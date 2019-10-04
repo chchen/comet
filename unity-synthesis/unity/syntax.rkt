@@ -74,9 +74,13 @@
          multi-assignment*)
 
 ;; Example syntax
-;; (unity* (list (declare* 0 'readwrite)
-;;               (declare* 1 'write))
-;;         (multi-assignment* '(1) '(#t))
-;;         (list (assign* (ref* 0)
-;;                        (multi-assignment* '(1)
-;;                                           '((not* (ref* 0)))))))
+
+;; (unity*
+;;  (list (declare* 0 'readwrite)
+;;        (declare* 1 'readwrite))
+;;  (multi-assignment* (list 0 1)
+;;                     (list #t #f))
+;;  (list (assign* (not* (eq* (ref* 0) (ref* 1)))
+;;                 (multi-assignment* (list 0 1)
+;;                                    (list (ref* 1)
+;;                                          (ref* 0))))))

@@ -5,37 +5,96 @@
          rosette/lib/angelic)
 
 ;; Inversion over expressions
-(define-synthax (exp?? depth)
-  #:base (choose #t
-                 #f
-                 (read* (choose 0 1 2 3 4 5 6 7 8 9 10 11 12 13))
-                 (ref* (??)))
-  #:else (choose #t
-                 #f
-                 (read* (choose 0 1 2 3 4 5 6 7 8 9 10 11 12 13))
-                 (ref* (??))
-                 (not* (exp?? (- depth 1)))
-                 ((choose and* or* eq* neq*)
-                  (exp?? (- depth 1))
-                  (exp?? (- depth 1)))))
+(define (exp?? depth env)
+  (define (fill-terminals env stub)
+    (let ([vars (car env)]
+          [pins (append (cadr env)
+                        (cddr env))])
+      (cond
+        [(and (pair? pins)
+              (pair? vars))
+         (apply choose*
+                (read* (apply choose* pins))
+                (ref* (apply choose* vars))
+                stub)]
+        [(and (pair? pins)
+              (null? vars))
+         (apply choose*
+                (read* (apply choose* pins))
+                stub)]
+        [(and (null? pins)
+              (pair? vars))
+         (apply choose*
+                (ref* (apply choose* vars))
+                stub)]
+        [else (apply choose* stub)])))
+  
+  (if (positive? depth)
+      (let ([stub (list 'true
+                        'false
+                        (not* (exp?? (- depth 1) env))
+                        ((choose* and*
+                                  or*
+                                  eq*
+                                  neq*)
+                         (exp?? (- depth 1) env)
+                         (exp?? (- depth 1) env)))])
+        (fill-terminals env stub))
+      (let ([stub (list 'true
+                        'false)])
+        (fill-terminals env stub))))
 
-;; Inversion over sequences of statements (in this case, writes)
-(define-synthax (stmt?? edepth depth)
-  #:base null
-  #:else (choose null
-                 (seq* (choose (write!* (choose 0 1 2 3 4 5 6 7 8 9 10 11 12 13)
-                                       (exp?? edepth))
-                               (set!* (??)
-                                      (exp?? edepth)))
-                       (stmt?? edepth (- depth 1)))))
+;; Inversion over statements
+(define (stmt?? exp-depth stmt-depth env)
+  (if (positive? stmt-depth)
+      (let ([stub (stmt?? exp-depth (- stmt-depth 1) env)]
+            [vars (car env)]
+            [pins (cddr env)])
+        (cond
+          [(and (pair? pins)
+                (pair? vars))
+           (seq* (choose* (write!* (apply choose* pins)
+                                   (exp?? exp-depth env))
+                          (set!* (apply choose* vars)
+                                 (exp?? exp-depth env)))
+                 stub)]
+          [(and (pair? pins)
+                (null? vars))
+           (seq* (choose* (write!* (apply choose* pins)
+                                   (exp?? exp-depth env)))
+                 stub)]
+          [(and (null? pins)
+                (pair? vars))
+           (seq* (choose* (set!* (apply choose* vars)
+                                 (exp?? exp-depth env)))
+                 stub)]
+          [else '()]))
+      '()))
 
-;; Inversion over guarded statements (one guard with sequences of statements in the
-;; consequence blocks
-(define-synthax (guardstmt?? expdepth blockdepth depth)
-  #:base null
-  #:else (choose null
-                 (seq* (if* (exp?? expdepth)
-                            (stmt?? expdepth blockdepth))
-                       (guardstmt?? expdepth blockdepth (- depth 1)))))
+;; Inversion over declarations
+(define (decl?? depth env)
+  (if (positive? depth)
+      (let ([stub (decl?? (- depth 1) env)]
+            [vars (car env)]
+            [pins (append (cadr env)
+                          (cddr env))])
+        (cond
+          [(and (pair? pins)
+                (pair? vars))
+           (seq* (choose* (pin-mode* (apply choose* pins)
+                                     (choose* 'input 'output))
+                          (var* (apply choose* vars)))
+                 stub)]
+          [(and (pair? pins)
+                (null? vars))
+           (seq* (pin-mode* (apply choose* pins)
+                            (choose* 'input 'output))
+                 stub)]
+          [(and (null? pins)
+                (pair? vars))
+           (seq* (var* (apply choose* vars))
+                 stub)]
+          [else '()]))
+      '()))
 
-(provide exp?? stmt?? guardstmt??)
+(provide exp?? stmt?? decl??)

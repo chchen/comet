@@ -1,0 +1,30 @@
+* Synthesis todo: cchen
+
+- Type checking predicate doesn't work with synthesis. Why?
+
+Right now the interpreter doesn't bubble up type environment errors,
+which means we have a bug where we can admit "weird" programs, like
+those that refer to invalid variables. This is also bad because it
+allows for a larger number of candidate programs (making synthesis
+slow) since our expression and statement generators allow for all
+allowed pin indentifiers, not just those that are initialized in the
+setup section.
+
+We tried to work around this by defining a type/syntax check function,
+that would take a expression/statement and a type environment, and
+check to make sure the expression/statement was well-typed. For
+whatever reason, handing off (and (valid-expression? exp env)...) to
+synthesis leads to a an unsatisfiable result. There's probably
+something in how the checker is written that borks the synthesis
+process.
+
+We could dig deeper into this, or we can try and use (choose*) instead
+of (choose) and build our recursive syntaxes functionally using
+(define) rather than with (define-synthax) that uses macros.
+
+I ended up doing this and it seems to work well. I've switched the
+declaration, statement, and expression generators now.
+
+Barring that, we can clean up the interpreters to actually return
+dynamic type errors when they occur (may actually do, or remove the
+error checks to make cleaner)
