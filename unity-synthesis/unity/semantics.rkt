@@ -1,7 +1,8 @@
 #lang rosette
 
 (require "syntax.rkt"
-         "../util.rkt")
+         "../util.rkt"
+         rosette/lib/match)
 
 ;; Verifies if the variable v is defined in the read-type environment
 (define (can-read? v env)
