@@ -1,7 +1,6 @@
 #lang rosette
 
 (require "syntax.rkt"
-         rosette/lib/synthax
          rosette/lib/angelic)
 
 ;; Inversion over expressions
