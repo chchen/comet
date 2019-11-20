@@ -1,8 +1,8 @@
 #lang rosette
 
 (require "arduino/synth.rkt"
-         "arduino/validate.rkt"
-         "unity/syntax.rkt")
+         "unity/syntax.rkt"
+         "verilog/synth.rkt")
 
 ;; Synthesize an equivalent to two-input asynchronous parity function
 (define parity-prog
@@ -41,7 +41,8 @@
                                            (ref* 'b-data)))
                                     (or* (ref* 'a-data)
                                          (ref* 'b-data)))))))))
+;; For Arduino
+;;(prog-synth parity-prog)
 
-(prog-synth parity-prog)
-
-
+;; For Verilog
+;;(synthesize-program parity-prog 'parity)
