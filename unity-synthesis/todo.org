@@ -28,3 +28,9 @@ declaration, statement, and expression generators now.
 Barring that, we can clean up the interpreters to actually return
 dynamic type errors when they occur (may actually do, or remove the
 error checks to make cleaner)
+
+- Context translation from UNITY to Verilog (ok)
+- Symbolic state generator for Verilog (ok)
+- State equivalence between UNITY and Verilog (ok)
+- Syntax and semantics for Verilog triggers
+- Backend for Arduino and Verilog syntax
