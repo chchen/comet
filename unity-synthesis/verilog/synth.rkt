@@ -12,6 +12,8 @@
          rosette/lib/synthax)
 
 (define max-expression-depth 5)
+(define default-inputs '(reset clock))
+(define default-wires '(reset clock))
 
 ;; Ensure that the unity and verilog state representations are equal up to
 ;; the unity context
@@ -29,22 +31,31 @@
   (helper (remove-duplicates (append (car unity-cxt)
                                      (cdr unity-cxt)))))
 
-;; Given a UNITY context, generate a symbolic state representation
-(define (verilog-symbolic-state cxt)
+;; Given a verilog context and the unity context and symbolic state,
+;; generate a verilog symbolic state that uses the unity symbolic state
+;; for variables shared between the two, and generates new symbolic values
+;; for any exclusive variables.
+(define (verilog-symbolic-state verilog-cxt unity-cxt unity-state)
   (define (new-sym)
     (define-symbolic* x boolean?)
     x)
 
-  (define (helper vars)
+  (define (helper vars unity-vars unity-state)
     (if (null? vars)
         '()
-        (cons (cons (car vars)
-                    (new-sym))
-              (helper (cdr vars)))))
+        (let* ([var (car vars)]
+               [sym-val (if (in-list? var unity-vars)
+                            (unity-sem:state-get var unity-state)
+                            (new-sym))])
+          (cons (cons var sym-val)
+                (helper (cdr vars) unity-vars unity-state)))))
 
-  (match cxt
-    [(context* _ _ wire reg)
-     (helper (remove-duplicates (append wire reg)))]))
+  (match verilog-cxt
+    [(context* _ _ wires regs)
+     (helper (remove-duplicates (append wires regs))
+             (remove-duplicates (append (car unity-cxt)
+                                        (cdr unity-cxt)))
+             unity-state)]))
 
 ;; Convert a UNITY context structure and convert it into a
 ;; Verilog context structure.
@@ -67,7 +78,7 @@
   (define (write-helper write-cxt out reg)
     (if (null? write-cxt)
         (let ([read-cxt (car unity-cxt)])
-          (read-helper read-cxt '() out '() reg))
+          (read-helper read-cxt default-inputs out default-wires reg))
         (let ([write-var (car write-cxt)])
           (write-helper (cdr write-cxt)
                         (cons write-var out)
@@ -114,35 +125,43 @@
 ;;                       base-verilog-inputs
 ;;                       '())]))
 
-(define (synthesize-expression unity-exp unity-cxt verilog-cxt state)
+(define (synthesize-expression unity-exp unity-cxt verilog-cxt unity-state verilog-state)
   (define (try-synth depth)
     (if (> depth max-expression-depth)
         'exp-depth-exceeded
         (let* ([sketch (exp?? depth verilog-cxt)]
                [synth (synthesize
-                       #:forall state
+                       #:forall unity-state
                        #:guarantee
                        (assert
-                        (eq? (eval sketch verilog-cxt state)
-                             (unity-sem:evaluate unity-exp unity-cxt state))))])
+                        (eq? (unity-sem:evaluate unity-exp unity-cxt unity-state)
+                             (eval sketch verilog-cxt verilog-state))))])
           (if (eq? synth (unsat))
               (try-synth (+ 1 depth))
               (evaluate sketch synth)))))
 
   (try-synth 0))
 
-(define (synthesize-multi-assignment unity-multi unity-cxt verilog-cxt state assume)
+(define (synthesize-multi-assignment unity-multi unity-cxt verilog-cxt unity-state verilog-state assume)
   (define (try-synth exp-depth stmt-depth)
     (if (> exp-depth max-expression-depth)
         'exp-depth-exceeded
         (let* ([sketch (stmt?? stmt-depth exp-depth 0 verilog-cxt)]
                [synth (synthesize
-                       #:forall state
-                       #:assume #t
+                       #:forall unity-state
+                       #:assume assume
                        #:guarantee
-                       (assert
-                        (eq? (interpret-stmt sketch verilog-cxt state)
-                             (unity-sem:interpret-multi unity-multi unity-cxt state))))])
+                       (let ([unity-next-state (unity-sem:interpret-multi unity-multi
+                                                                     unity-cxt
+                                                                     unity-state)]
+                             [verilog-next-state (interpret-stmt sketch
+                                                            verilog-cxt
+                                                            verilog-state)])
+                         (assert
+                          (unity-verilog-state-eq? unity-cxt
+                                                   verilog-cxt
+                                                   unity-next-state
+                                                   verilog-next-state))))])
           (if (eq? synth (unsat))
               (try-synth (+ 1 exp-depth) stmt-depth)
               (evaluate sketch synth)))))
@@ -152,56 +171,44 @@
      (let ([assignment-count (length vars)])       
        (try-synth 0 assignment-count))]))
 
-(define (synthesize-assign unity-assign unity-cxt verilog-cxt state)
+(define (synthesize-assign unity-assign unity-cxt verilog-cxt unity-state verilog-state)
   (define (single-assign assign)
     (match assign
       [(unity:assign* guard multi)
        (let* ([verilog-guard (synthesize-expression guard
                                                     unity-cxt
                                                     verilog-cxt
-                                                    state)]
-              [guard-assertion (eval verilog-guard verilog-cxt state)]
+                                                    unity-state
+                                                    verilog-state)]
+              [guard-assertion (eval verilog-guard verilog-cxt verilog-state)]
               [verilog-multi (synthesize-multi-assignment multi
                                                           unity-cxt
                                                           verilog-cxt
-                                                          state
+                                                          unity-state
+                                                          verilog-state
                                                           guard-assertion)])
          (if* verilog-guard verilog-multi '()))]))
 
   (if (null? unity-assign)
       '()
       (cons (single-assign (car unity-assign))
-            (synthesize-assign (cdr unity-assign) unity-cxt verilog-cxt state))))
+            (synthesize-assign (cdr unity-assign) unity-cxt verilog-cxt unity-state verilog-state))))
 
-(define (generate-externals unity-declare)
-  (if (null? unity-declare)
-      '()
-      (match (car unity-declare)
-        [(unity:declare* symbol _)
-         (cons symbol
-               (generate-externals (cdr unity-declare)))])))
+(define (generate-externals cxt)
+  (match cxt
+    [(context* in out _ _) (append in out)]))
 
-(define (generate-io-constraints unity-declare)
-  (if (null? unity-declare)
-      '()
-      (match (car unity-declare)
-        [(unity:declare* symbol mode)
-         (let ([constraint (match mode
-                             ['read (input* symbol)]
-                             [_ (output* symbol)])])
-           (cons constraint
-                 (generate-io-constraints (cdr unity-declare))))])))
+(define (generate-io-constraints cxt)
+  (match cxt
+    [(context* in out _ _)
+     (append (map input* in)
+             (map output* out))]))
 
-(define (generate-type-declarations unity-declare)
-  (if (null? unity-declare)
-      '()
-      (match (car unity-declare)
-        [(unity:declare* symbol mode)
-         (let ([constraint (match mode
-                             ['read (wire* symbol)]
-                             [_ (reg* symbol)])])
-           (cons constraint
-                 (generate-type-declarations (cdr unity-declare))))])))
+(define (generate-type-declarations cxt)
+  (match cxt
+    [(context* _ _ wires regs)
+     (append (map wire* wires)
+             (map reg* regs))]))
 
 (define (synthesize-program unity-program name)
   (match unity-program
@@ -209,25 +216,27 @@
                    initially
                    assign)
      (let* ([unity-cxt (unity-sem:interpret-declare declare)]
-            [externals (generate-externals declare)]
-            [io-constraints (generate-io-constraints declare)]
-            [type-declarations (generate-type-declarations declare)]
-            [verilog-cxt (interpret-preamble io-constraints type-declarations)]
-            [state (unity-symbolic-state unity-program)])
-       (module* name
-           externals
+            [verilog-cxt (unity-to-verilog-cxt unity-cxt)]
+            [externals (generate-externals verilog-cxt)]
+            [io-constraints (generate-io-constraints verilog-cxt)]
+            [type-declarations (generate-type-declarations verilog-cxt)]
+            [unity-state (unity-symbolic-state unity-program)]
+            [verilog-state (verilog-symbolic-state verilog-cxt unity-cxt unity-state)])
+       (module* name externals
          io-constraints
          type-declarations
-         (always* (list 'clk 'reset)
-                  (list (if* 'reset
+         (always* (list (posedge* 'clk) (posedge* 'reset))
+                  (list (if* (val* 'reset)
                              (synthesize-multi-assignment initially
                                                           unity-cxt
                                                           verilog-cxt
-                                                          state
+                                                          unity-state
+                                                          verilog-state
                                                           #t)
                              (synthesize-assign assign
                                                 unity-cxt
                                                 verilog-cxt
-                                                state))))))]))
+                                                unity-state
+                                                verilog-state))))))]))
 
 (provide synthesize-program)

@@ -32,5 +32,29 @@ error checks to make cleaner)
 - Context translation from UNITY to Verilog (ok)
 - Symbolic state generator for Verilog (ok)
 - State equivalence between UNITY and Verilog (ok)
-- Syntax and semantics for Verilog triggers
+- Synthesize verilog declarations (inversion on declarations)
+
+I think we can compile them from the context declaration for now.
+
+- Modify synthesis routines to use shiny new stuff
+
+We still have the issue where we need to make sure the verilog
+symbolic states are the same as the unity symbolic states for
+synthesis. (done)
+
+- Syntax and semantics for Verilog triggers (not needed?)
+
+Verilog triggers are both discrete events (posedge/negedge) and states
+('clk -> #t). So in order to support triggers, we need to be able to
+provide the discrete events as arguments to the interpreter, and
+assert the values in the state mapping. This should be okay since our
+new state equivalence function only concerns itself with variables
+defined in the UNITY program, so variables that are only defined in
+the Verilog program like reset and clock are ignored. I don't think we
+need to add any additional things to the syntax and semantics, but we
+just need to make sure that we construct the Verilog state mappings
+the correct way, which I think means adding reset and clock to every
+program's input and wire contexts.
+
+- Add assertions to make sure synthesis is correct
 - Backend for Arduino and Verilog syntax
