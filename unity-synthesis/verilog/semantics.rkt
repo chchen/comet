@@ -74,7 +74,7 @@
         (let* ([val (eval r cxt prev-state)]
                [store-result (state-put l val cxt next-state)])
           (interpret-stmt-h tail cxt prev-state store-result))]
-       [_ 'err])]))
+       [_ 'stmt-err])]))
 
 (define (interpret-stmt stmt cxt state)
   (interpret-stmt-h stmt cxt state state))
@@ -113,7 +113,7 @@
     ['() #f]
     [(cons h tail) (or (in-list? h events)
                        (s-list-triggered? tail events))]
-    [_ 'err]))
+    [_ 's-list-err]))
 
 ;; Quick check: sensitivity list
 ;; (let ([s-list (list (posedge* 'clock)
@@ -137,7 +137,7 @@
                            (interpret-stmt stmt cxt state)
                            state)])
        (interpret-always-blocks tail cxt next-state events))]
-    [_ 'err]))
+    [_ 'always-err]))
 
 ;; Quick check: tiggered and untriggered always blocks
 ;; (let* ([cxt (context* (list 'input)
@@ -173,36 +173,57 @@
 ;;               (state-get 'output cxt start-state))))))
 
 ;; Interpret a module given context, state, and list of triggering events
-(define (interpret-module verilog-module cxt state events)
+(define (interpret-module verilog-module state events)
   (match verilog-module
-    [(module* _ _ _ _ blocks)
-     (interpret-always-blocks blocks cxt state events)]
-    [_ 'err]))
+    [(module* _ _ in-outs wires-regs blocks)
+     (let* ([cxt (interpret-preamble in-outs wires-regs)])
+       (interpret-always-blocks blocks cxt state events))]
+     [_ 'module-err]))
 
 ;; Quick check: fifo on clock tick
+
+;; (define-symbolic A B boolean?)
+
 ;; (let* ([test-module
 ;;         (module*
 ;;             'test
-;;             (list 'in 'out 'clk)
+;;             (list 'in 'out 'clock)
 ;;           (list (input* 'in)
 ;;                 (output* 'out)
-;;                 (input* 'clk))
+;;                 (input* 'clock)
+;;                 (input* 'reset))
 ;;           (list (wire* 'in)
 ;;                 (reg* 'out)
-;;                 (wire* 'clk))
-;;           (list (always* (list (posedge* 'clk))
-;;                          (list (<=* 'out
-;;                                     (val* 'in))))))]
-;;        [cxt (parse-context test-module)]
+;;                 (wire* 'clock)
+;;                 (wire* 'reset))
+;;           (list (always* (list (posedge* 'clock) (posedge* 'reset))
+;;                          (list (if* (val* 'reset)
+;;                                     (list (<=* 'out
+;;                                                'zero))
+;;                                     (list (<=* 'out
+;;                                                (val* 'in))))))))]
 ;;        [start-state (list (cons 'in A)
 ;;                           (cons 'out B))]
-;;        [event (list (posedge* 'clk))]
-;;        [end-state (interpret-module test-module cxt start-state event)])
-;;   (verify
-;;    (assert
-;;     (eq? (state-get 'out cxt end-state)
-;;          (state-get 'in cxt start-state)))))
+;;        [cxt (interpret-preamble (list (input* 'in)
+;;                                       (output* 'out)
+;;                                       (input* 'clock)
+;;                                       (input* 'reset))
+;;                                 (list (wire* 'in)
+;;                                       (reg* 'out)
+;;                                       (wire* 'clock)
+;;                                       (wire* 'reset)))]
+;;        [reset-state (interpret-module test-module
+;;                                       (cons (cons 'reset #t)
+;;                                             start-state)
+;;                                       (list (posedge* 'reset)
+;;                                             (posedge* 'clock)))]
+;;        [clock-state (interpret-module test-module
+;;                                       (cons (cons 'reset #f)
+;;                                             start-state)
+;;                                       (list (posedge* 'clock)))])
+;;   (list reset-state clock-state))
 
-(provide eval
+(provide interpret-module
          interpret-preamble
-         interpret-stmt)
+         interpret-stmt
+         eval)

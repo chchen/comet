@@ -87,44 +87,6 @@
   (let ([write-cxt (cdr unity-cxt)])
     (write-helper write-cxt '() '())))
 
-;; (define base-verilog-inputs (list 'clock 'reset))
-
-;; (define (unity-to-verilog-cxt unity-prog)
-;;   (define (context-builder decls inputs outputs wires regs)
-;;     (if (null? decls)
-;;         ;; We're done: return the completed context.
-;;         (context* inputs
-;;                   outputs
-;;                   wires
-;;                   regs)
-;;         ;; Go down the declarations
-;;         (match (car decls)
-;;           [(unity:declare* ident 'read)
-;;            (context-builder (cdr decls)
-;;                             (cons ident inputs)
-;;                             outputs
-;;                             (cons ident wires)
-;;                             regs)]
-;;           [(unity:declare* ident 'write)
-;;            (context-builder (cdr decls)
-;;                             inputs
-;;                             (cons ident outputs)
-;;                             wires
-;;                             (cons ident regs))]
-;;           [(unity:declare* ident 'readwrite)
-;;            (context-builder (cdr decls)
-;;                             inputs
-;;                             (cons ident outputs)
-;;                             wires
-;;                             (cons ident regs))])))
-;;   (match unity-prog
-;;     [(unity:unity* declarations _ _)
-;;      (context-builder declarations
-;;                       base-verilog-inputs
-;;                       '()
-;;                       base-verilog-inputs
-;;                       '())]))
-
 (define (synthesize-expression unity-exp unity-cxt verilog-cxt unity-state verilog-state)
   (define (try-synth depth)
     (if (> depth max-expression-depth)
@@ -196,13 +158,13 @@
 
 (define (generate-externals cxt)
   (match cxt
-    [(context* in out _ _) (append in out)]))
+    [(context* inputs outputs _ _) (append inputs outputs)]))
 
 (define (generate-io-constraints cxt)
   (match cxt
-    [(context* in out _ _)
-     (append (map input* in)
-             (map output* out))]))
+    [(context* inputs outputs _ _)
+     (append (map input* inputs)
+             (map output* outputs))]))
 
 (define (generate-type-declarations cxt)
   (match cxt
@@ -210,33 +172,32 @@
      (append (map wire* wires)
              (map reg* regs))]))
 
-(define (synthesize-program unity-program name)
+(define (synthesize-verilog-program unity-program name)
   (match unity-program
     [(unity:unity* declare
                    initially
                    assign)
      (let* ([unity-cxt (unity-sem:interpret-declare declare)]
             [verilog-cxt (unity-to-verilog-cxt unity-cxt)]
-            [externals (generate-externals verilog-cxt)]
-            [io-constraints (generate-io-constraints verilog-cxt)]
-            [type-declarations (generate-type-declarations verilog-cxt)]
-            [unity-state (unity-symbolic-state unity-program)]
-            [verilog-state (verilog-symbolic-state verilog-cxt unity-cxt unity-state)])
-       (module* name externals
-         io-constraints
-         type-declarations
-         (always* (list (posedge* 'clk) (posedge* 'reset))
-                  (list (if* (val* 'reset)
-                             (synthesize-multi-assignment initially
-                                                          unity-cxt
-                                                          verilog-cxt
-                                                          unity-state
-                                                          verilog-state
-                                                          #t)
-                             (synthesize-assign assign
-                                                unity-cxt
-                                                verilog-cxt
-                                                unity-state
-                                                verilog-state))))))]))
+            [unity-start (unity-symbolic-state unity-program)]
+            [verilog-start (verilog-symbolic-state verilog-cxt unity-cxt unity-start)]
+            [verilog-reset (synthesize-multi-assignment initially
+                                                        unity-cxt
+                                                        verilog-cxt
+                                                        unity-start
+                                                        verilog-start
+                                                        #t)]
+            [verilog-assign (synthesize-assign assign
+                                               unity-cxt
+                                               verilog-cxt
+                                               unity-start
+                                               verilog-start)])
+       (module* name (generate-externals verilog-cxt)
+         (generate-io-constraints verilog-cxt)
+         (generate-type-declarations verilog-cxt)
+         (list (always* (list (posedge* 'clock) (posedge* 'reset))
+                        (list (if* (val* 'reset)
+                                   verilog-reset
+                                   verilog-assign))))))]))
 
-(provide synthesize-program)
+(provide synthesize-verilog-program)

@@ -45,4 +45,4 @@
 ;;(prog-synth parity-prog)
 
 ;; For Verilog
-(synthesize-program parity-prog 'parity)
+(synthesize-verilog-program parity-prog 'parity)
