@@ -57,4 +57,22 @@ the correct way, which I think means adding reset and clock to every
 program's input and wire contexts.
 
 - Add assertions to make sure synthesis is correct
+
+This means finishing up the verilog module interpreter, and maybe
+cleaning up the way we generate contexts, etc. Right now we pass the
+context into the state-get function, which makes for some awkward
+usage. Perhaps we should scrap the dynamic checks in state-get to
+allow us to intropect the state without having the context at
+hand. YAGNI, you know.
+
+We want to be able to take the synthesized program and show that
+
+-- verilog interpret for reset === UNITY interpret for initially:
+works, sorta!
+
+-- verilog interpret for clock === UNITY interpret for assign:
+doesn't work yet: we get a symbolic formula that's unsat
+
 - Backend for Arduino and Verilog syntax
+
+Foldr with string-append is your friend
