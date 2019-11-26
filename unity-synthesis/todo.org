@@ -75,4 +75,14 @@ doesn't work yet: we get a symbolic formula that's unsat
 
 - Backend for Arduino and Verilog syntax
 
+Verilog syntax (OK)
+Arduino syntax (todo)
+
+Expressions turn into single strings, recursively, that's fine.
+Statements are sequences of statements, which mean they're tree like,
+so we have to flatten them somehow, and join them with a
+newline. Right now emit-statements doesn't quite work. But we're close.
+
 Foldr with string-append is your friend
+
+- Try specifying different things in UNITY
