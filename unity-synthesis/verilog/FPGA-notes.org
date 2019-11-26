@@ -1,0 +1,21 @@
+* How to program a Intel Cyclone FPGA on an Arduino Vidor MKR4000 Board
+
+** Required Software
+
+- Windows or Linux
+- Intel Quartus FPGA IDE
+- Arduino IDE with Vidor MKR4000 Libraries
+- The vidorcvt utility, which is available from
+-- https://github.com/wd5gnr/VidorFPGA
+
+** General Flow
+
+1. You define a project in the Quartus Software
+2. The Quartus Software compiles your design into an output file
+3. Convert the output file into a ttf file using Quartus
+4. Incorporate the ttf file's contents into a Arduino project's app.h file
+5. Program the Arduino MKR 4000 board, which uploads your new project to the FPGA
+
+** Pin Assignments
+
+TODO
