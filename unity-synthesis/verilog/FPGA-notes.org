@@ -1,21 +1,82 @@
 * How to program a Intel Cyclone FPGA on an Arduino Vidor MKR4000 Board
 
+** Required Hardware
+
+ - Arduino MKR Vidor 4000 Board
+
 ** Required Software
 
-- Windows or Linux
-- Intel Quartus FPGA IDE
-- Arduino IDE with Vidor MKR4000 Libraries
-- The vidorcvt utility, which is available from
--- https://github.com/wd5gnr/VidorFPGA
+ - Windows or Linux
+   - A virtual machine on OS X works, since programming is done via
+     the Arduino IDE on the host OS.
 
-** General Flow
+ - Intel Quartus FPGA IDE
 
-1. You define a project in the Quartus Software
-2. The Quartus Software compiles your design into an output file
-3. Convert the output file into a ttf file using Quartus
-4. Incorporate the ttf file's contents into a Arduino project's app.h file
-5. Program the Arduino MKR 4000 board, which uploads your new project to the FPGA
+ - Arduino IDE with MKR Vidor 4000 Libraries
 
-** Pin Assignments
+ - The vidorcvt utility, which is available from
+   - https://github.com/wd5gnr/VidorFPGA
 
-TODO
+** High-Level Flow
+
+ 1. Create or modify a project in the Quartus IDE, defining
+    1. Schematic of functional blocks and the connections
+    2. Verilog code to define the behaviour of the functional blocks
+    3. Pin assignments to associate physical pins with functional
+       block I/O names
+
+ 2. Compile the project, which runs checks and creates a binary
+    "bitstream" file
+
+ 3. Convert the bitstream file into TTF format, which is readable by
+    vidorcvt
+    1. Use the Quartus IDE's "Convert Programming Files" utility
+
+ 4. Convert the TTF file into a form the Arduino IDE can use for
+    programming
+    1. Use vidorcvt to conver the TTF file into a binary string
+    2. Incorporate the binary string into an app.h file in a new or
+       existing Arduino project using the MKR Vidor 4000 library
+
+ 5. Use the Arduino IDE to upload the new program to the Arduino board
+
+** Pin Assignments (Arduino pin:FPGA pin)
+
+ + CLK: E2
+
+ + Analog I/O Pins (left side)
+
+   + AREF: B1
+   + DAC0/A0: C2
+   + A1: C3
+   + A2: C6
+   + A3: D1
+   + A4: D3
+   + A5: F3
+   + A6: G2
+
+ + Digital I/O Pins (left side)
+
+   + D0: G1
+   + D1: N3
+   + D2: P3
+   + D3: R3
+   + D4: T3
+   + D5: T2
+
+ + Digital I/O Pins (right side)
+
+   + D6: G16
+   + D7: G15
+   + D8/MOSI: F16
+   + D9/SCK: F15
+   + D10/MISO: C16
+   + D11/SDA: C15
+   + D12/SCL: B16
+   + D13/RX: C11
+   + D14/TX: A13
+
+ + Non-I/O Pins (right side)
+
+   + RESET: E1
+
