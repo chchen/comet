@@ -195,8 +195,8 @@
        (module* name (generate-externals verilog-cxt)
          (generate-io-constraints verilog-cxt)
          (generate-type-declarations verilog-cxt)
-         (list (always* (list (posedge* 'clock) (posedge* 'reset))
-                        (list (if* (val* 'reset)
+         (list (always* (list (posedge* 'clock) (negedge* 'reset))
+                        (list (if* (not* (val* 'reset))
                                    verilog-reset
                                    verilog-assign))))))]))
 
