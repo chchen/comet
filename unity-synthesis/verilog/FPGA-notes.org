@@ -20,9 +20,12 @@
 ** High-Level Flow
 
  1. Create or modify a project in the Quartus IDE, defining
-    1. Schematic of functional blocks and the connections
+    1. Schematic of functional blocks and their connections, along with
+       input and output pins.
     2. Verilog code to define the behaviour of the functional blocks
-    3. Pin assignments to associate physical pins with functional
+    3. Start Analysis & Elaboration to detect any input and output
+       pins that need to be bound to physical pins.
+    4. Pin assignments to associate physical pins with functional
        block I/O names
 
  2. Compile the project, which runs checks and creates a binary
@@ -78,5 +81,5 @@
 
  + Non-I/O Pins (right side)
 
-   + RESET: E1
+   + RESET: E1 (pullup high)
 
