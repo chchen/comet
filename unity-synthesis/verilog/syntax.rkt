@@ -127,17 +127,20 @@
              (emit-assignments tail)))]))
 
 (define (emit-module module)
-  (match module
-    [(module* name externals
-       inputs-outputs
-       type-declarations
-       assignments)
-     (list (format "module ~a(~a);" name (emit-externals externals))
-           (append
-            (map emit-io inputs-outputs)
-            (map emit-decl type-declarations))
-           (emit-assignments assignments)
-           "endmodule")]))
+  (string-join
+   (flatten
+    (match module
+      [(module* name externals
+         inputs-outputs
+         type-declarations
+         assignments)
+       (list (format "module ~a(~a);" name (emit-externals externals))
+             (append
+              (map emit-io inputs-outputs)
+              (map emit-decl type-declarations))
+             (emit-assignments assignments)
+             "endmodule")]))
+   " "))
 
 (provide module*
          input*

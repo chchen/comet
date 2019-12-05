@@ -14,6 +14,26 @@
 (struct read* (pin) #:transparent)
 (struct ref* (var) #:transparent)
 
+(define (emit-expression expression)
+  (match expression
+    [(and* left right) (format "(~a && ~a)"
+                               (emit-expression left)
+                               (emit-expression right))]
+    [(or* left right) (format "(~a || ~a)"
+                              (emit-expression left)
+                              (emit-expression right))]
+    [(eq* left right) (format "(~a == ~a)"
+                              (emit-expression left)
+                              (emit-expression right))]
+    [(neq* left right) (format "(~a != ~a)"
+                               (emit-expression left)
+                               (emit-expression right))]
+    [(not* exp) (format "!~a" (emit-expression exp))]
+    [(read* pin) (format "digitalRead(~a)" pin)]
+    [(ref* var) var]
+    ['true "HIGH"]
+    ['false "LOW"]))
+
 ;; Setup-only statements
 (struct var* (ident) #:transparent)
 (struct pin-mode* (pin mode) #:transparent)
@@ -26,12 +46,51 @@
 ;; Sequencing
 (struct seq* (left right) #:transparent)
 
+(define (emit-block block)
+  (list "{"
+        block
+        "}"))
+
+(define (emit-statements statements)
+  (match statements
+    ['() '()]
+    [(seq* fst snd)
+     (let ([fst-strings            
+            (match fst
+              [(var* ident) (format "int ~a;" ident)]
+              [(pin-mode* ident mode) (format "pinMode(~a, ~a);"
+                                              ident
+                                              (if (eq? mode 'input)
+                                                  "INPUT"
+                                                  "OUTPUT"))]
+              [(write!* pin exp) (format "digitalWrite(~a, ~a);"
+                                         pin
+                                         (emit-expression exp))]
+              [(set!* var exp) (format "~a = ~a;"
+                                       var
+                                       (emit-expression exp))]
+              [(if* exp left) (list (format "if (~a)" (emit-expression exp))
+                                    (emit-block (emit-statements left)))])])
+       (cons fst-strings (emit-statements snd)))]))
+
+(define (emit-program program)
+  (string-join
+   (flatten
+    (match program
+      [(arduino* (setup* setup)
+                 (loop* loop))
+       (list "void setup()"
+             (emit-block (emit-statements setup))
+             "void loop()"
+             (emit-block (emit-statements loop)))]))
+   " "))
+
 (define (seq-append left right)
   (match left
     [(seq* fst snd) (seq* fst (seq-append snd right))]
     ['() right]))
 
-(provide arduino* setup* loop* and* or* eq* neq* not* read* ref* var* pin-mode* write!* set!* if* seq* seq-append)
+(provide arduino* setup* loop* and* or* eq* neq* not* read* ref* var* pin-mode* write!* set!* if* seq* seq-append emit-program)
 
 ;; Example syntax
 ;; (arduino* (setup* (seq* (var* 'x)
@@ -45,4 +104,4 @@
 ;;                             (seq* (set!* 'x (not* (ref* 'x)))
 ;;                                   (seq* (write!* 1 (not* (read* 1)))
 ;;                                         null)))
-;;                        null)))
+;;                        null))))
