@@ -88,3 +88,8 @@ Foldr with string-append is your friend
   1. Single UNITY toggle spec (done!)
   2. Synthesize Arduino and Verilog implementations, lining up variables so inputs line up with outputs
   3. Program it in one go
+
+** Incomplete Arduino Support
+
+- We don't fully support variables in our model: declaration, etc.
+- Right now we just allocate Arduino I/O pins starting from Digital 0, going on up. Is this OK?
