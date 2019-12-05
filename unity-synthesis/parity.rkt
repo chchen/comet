@@ -2,7 +2,9 @@
 
 (require "arduino/synth.rkt"
          "unity/syntax.rkt"
-         "verilog/synth.rkt")
+         "verilog/synth.rkt"
+         (prefix-in arduino: "arduino/syntax.rkt")
+         (prefix-in verilog: "verilog/syntax.rkt"))
 
 ;; Synthesize an equivalent to two-input asynchronous parity function
 (define parity-prog
@@ -41,8 +43,10 @@
                                            (ref* 'b-data)))
                                     (or* (ref* 'a-data)
                                          (ref* 'b-data)))))))))
+
 ;; For Arduino
-;;(prog-synth parity-prog)
+(arduino:emit-program (prog-synth parity-prog))
 
 ;; For Verilog
-(synthesize-verilog-program parity-prog 'parity)
+(verilog:emit-module (synthesize-verilog-program parity-prog 'parity))
+    
