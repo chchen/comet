@@ -83,7 +83,7 @@
              (emit-block (emit-statements setup))
              "void loop()"
              (emit-block (emit-statements loop)))]))
-   " "))
+   "\n" #:after-last "\n"))
 
 (define (seq-append left right)
   (match left

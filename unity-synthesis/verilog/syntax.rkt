@@ -140,7 +140,7 @@
               (map emit-decl type-declarations))
              (emit-assignments assignments)
              "endmodule")]))
-   " "))
+   "\n"))
 
 (provide module*
          input*

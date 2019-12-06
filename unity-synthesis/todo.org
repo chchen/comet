@@ -86,8 +86,10 @@ Foldr with string-append is your friend
 
 - Synthesize a stupid simple Arduino-FPGA communicating system: bit toggle
   1. Single UNITY toggle spec (done!)
-  2. Synthesize Arduino and Verilog implementations, lining up variables so inputs line up with outputs
-  3. Program it in one go
+  2. Emit Arduino syntax (done!)
+  3. Synthesize Arduino and Verilog implementations, lining up
+     variables so inputs line up with outputs (done!)
+  4. Program it in one go (done!)
 
 ** Incomplete Arduino Support
 
