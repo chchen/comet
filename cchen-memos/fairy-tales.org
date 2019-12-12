@@ -68,3 +68,33 @@ an existing language, maybe what we want to do is identify particular
 idioms that exist in that language and reason about them. If you're
 uncomfortable with the term "idioms", then just say macros, except
 that these
+
+** 6 December 2019
+
+As of today, we can synthesize a small distributed system from a high
+level specification, written in UNITY. Our next step is to do a
+non-trivial implementation of single-round Paxos in UNITY, then
+synthesize to a mixed cluster of FPGAs and Arduinos.
+
+This poses a few challenges:
+
+1. Prove correctness theorems about the UNITY specification. Can we do
+   this with automated SMT theorem proving? Do we need to use
+   inductive proofs?
+2. Prove that the synthesized programs for Arduino or the FPGA are
+   indeed refinements of the UNITY spec. In some way, this requires us
+   to show that the way we've broken down the UNITY spec into smaller
+   synthesis challenges is sound.
+3. Handle bigger synthesis challenges. We're moving from boolean
+   values into bitvectors or small integers. This makes the search
+   space bigger for synthesis. Can we find ways to constrain the
+   search space to allow us to synthesize programs without as much
+   templating?
+
+At the end of this exercise, we hope to have built a system for
+constructing a non-trivial distributed system that's correct by
+construction, and from a language that makes automated reasoning
+tractable.
+
+Next steps: Can we imagine a method for inferring the specification
+from a even higher level protocol spec, or from examples?
