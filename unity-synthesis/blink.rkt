@@ -31,7 +31,9 @@
   (pp-helper tree ""))
 
 ;; For Arduino
-(arduino:emit-program (prog-synth blink-prog))
+(display
+ (arduino:emit-program (prog-synth blink-prog)))
 
 ;; For Verilog
-(verilog:emit-module (synthesize-verilog-program blink-prog 'blink))    
+(display
+ (verilog:emit-module (synthesize-verilog-program blink-prog 'blink)))

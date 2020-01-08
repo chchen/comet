@@ -68,7 +68,8 @@ hand. YAGNI, you know.
 ** Synthesized program verification
 
 - Verilog interpret for reset === UNITY interpret for initially: works, sorta!
-- Verilog interpret for clock === UNITY interpret for assign: doesn't work yet: we get a symbolic formula that's unsat
+- Verilog interpret for clock === UNITY interpret for assign: doesn't
+  work yet: we get a symbolic formula that's unsat
 
 ** Backend for Arduino and Verilog syntax
 
@@ -78,7 +79,8 @@ Arduino syntax (todo)
 Expressions turn into single strings, recursively, that's fine.
 Statements are sequences of statements, which mean they're tree like,
 so we have to flatten them somehow, and join them with a
-newline. Right now emit-statements doesn't quite work. But we're close.
+newline. Right now emit-statements doesn't quite work. But we're
+close.
 
 Foldr with string-append is your friend
 
@@ -94,4 +96,18 @@ Foldr with string-append is your friend
 ** Incomplete Arduino Support
 
 - We don't fully support variables in our model: declaration, etc.
-- Right now we just allocate Arduino I/O pins starting from Digital 0, going on up. Is this OK?
+- Right now we just allocate Arduino I/O pins starting from Digital 0,
+  going on up. Is this OK?
+
+** Synthesis Part 2
+
+1. Translate context from UNITY to target
+2. Generate dependent target state from UNITY symbolic state
+   1. This is so the symbolic execution is done with the same symbolic values
+   2. We could also try assuming the states are equivalent for
+      synthesis using the :assume annotation.
+3. Synthesize program components, in an additive fashion, with stronger assertions each time:
+   1. Declaration section
+   2. Initial assignment section including declaration
+   3. Running assignment section including declaration and initial assignment
+4. Constructed program *should* now be equivalent to the UNITY program.
