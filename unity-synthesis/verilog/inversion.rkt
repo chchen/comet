@@ -56,43 +56,50 @@
 ;;                  (xor A B))))])
 ;;   (evaluate sketch synth))
 
-;; A statement is a list structure of trees: Each non-null node of the list
-;; is an if* or <=* statement, which may have their own sub statements or
-;; sub expressions.
-(define (stmt?? depth sub-exp-depth sub-stmt-depth cxt)
+;; An assignment statement is a sequence of assignments and
+;; nothing else.
+
+(define (assignment?? depth exp-depth cxt)
   (if (positive? depth)
-      (let ([if-production
-             (if* (exp?? sub-exp-depth cxt)
-                  ;; then clause
-                  (stmt?? sub-stmt-depth
-                          sub-exp-depth
-                          (- sub-stmt-depth 1)
-                          cxt)
-                  ;; else clause
-                  (stmt?? sub-stmt-depth
-                          sub-exp-depth
-                          (- sub-stmt-depth 1)
-                          cxt))]
-            [tail
-             (stmt?? (- depth 1)
-                     sub-exp-depth
-                     sub-stmt-depth
-                     cxt)])   
-        (match cxt
-          ;; No writable names in the context.
-          ;; Admittedly, this is kind of a silly situation to be
-          ;; in, but hey, them's the breaks.
-          [(context* _ _ _ '())
-           (choose* '()
-                    (cons if-production
-                          tail))]
-          [(context* _ _ _ write-names)
-           (choose* '()
-                    (cons (choose*
-                           if-production
-                           (<=* (apply choose* write-names)
-                                (exp?? sub-exp-depth cxt)))
-                          tail))]))
+      (match cxt
+        ;; No writable names in the context.
+        ;; Admittedly, this is kind of a silly situation to be
+        ;; in, but hey, them's the breaks.
+        [(context* _ _ _ '()) '()]
+        [(context* _ _ _ write-names)
+         (choose* '()
+                  (cons (<=* (apply choose* write-names)
+                             (exp?? exp-depth cxt))
+                        (assignment?? (- depth 1)
+                                      exp-depth
+                                      cxt)))])
+      '()))
+
+;; A guarded statement is a variation of the statement tree where if
+;; trees can only be one deep. The consequence of an if statement is
+;; restricted to assignments only.
+
+(define (guarded-stmt?? depth exp-depth assign-depth cxt)
+  (if (positive? depth)
+      (match cxt
+        ;; No writable names in the context.
+        ;; Admittedly, this is kind of a silly situation to be
+        ;; in, but hey, them's the breaks.
+        [(context* _ _ _ '()) '()]
+        [(context* _ _ _ write-names)
+         (choose* '()
+                  (cons (assignment?? assign-depth exp-depth cxt)
+                        (guarded-stmt?? (- depth 1)
+                                        exp-depth
+                                        assign-depth
+                                        cxt))
+                  (cons (if* (exp?? exp-depth cxt)
+                             (assignment?? assign-depth exp-depth cxt)
+                             '())
+                        (guarded-stmt?? (- depth 1)
+                                        exp-depth
+                                        assign-depth
+                                        cxt)))])
       '()))
 
 ;; (define-symbolic A B C D boolean?)
@@ -118,4 +125,5 @@
 ;; TODO: Inversion of I/O and type-declaration statements
 
 (provide exp??
-         stmt??)
+         assignment??
+         guarded-stmt??)

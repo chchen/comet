@@ -11,7 +11,7 @@
          "inversion.rkt"
          rosette/lib/synthax)
 
-(define max-expression-depth 5)
+(define max-expression-depth 10)
 (define default-inputs '(reset clock))
 (define default-wires '(reset clock))
 
@@ -87,75 +87,6 @@
   (let ([write-cxt (cdr unity-cxt)])
     (write-helper write-cxt '() '())))
 
-(define (synthesize-expression unity-exp unity-cxt verilog-cxt unity-state verilog-state)
-  (define (try-synth depth)
-    (if (> depth max-expression-depth)
-        'exp-depth-exceeded
-        (let* ([sketch (exp?? depth verilog-cxt)]
-               [synth (synthesize
-                       #:forall unity-state
-                       #:guarantee
-                       (assert
-                        (eq? (unity-sem:evaluate unity-exp unity-cxt unity-state)
-                             (eval sketch verilog-cxt verilog-state))))])
-          (if (eq? synth (unsat))
-              (try-synth (+ 1 depth))
-              (evaluate sketch synth)))))
-
-  (try-synth 0))
-
-(define (synthesize-multi-assignment unity-multi unity-cxt verilog-cxt unity-state verilog-state assume)
-  (define (try-synth exp-depth stmt-depth)
-    (if (> exp-depth max-expression-depth)
-        'exp-depth-exceeded
-        (let* ([sketch (stmt?? stmt-depth exp-depth 0 verilog-cxt)]
-               [synth (synthesize
-                       #:forall unity-state
-                       #:assume assume
-                       #:guarantee
-                       (let ([unity-next-state (unity-sem:interpret-multi unity-multi
-                                                                     unity-cxt
-                                                                     unity-state)]
-                             [verilog-next-state (interpret-stmt sketch
-                                                            verilog-cxt
-                                                            verilog-state)])
-                         (assert
-                          (unity-verilog-state-eq? unity-cxt
-                                                   verilog-cxt
-                                                   unity-next-state
-                                                   verilog-next-state))))])
-          (if (eq? synth (unsat))
-              (try-synth (+ 1 exp-depth) stmt-depth)
-              (evaluate sketch synth)))))
-
-  (match unity-multi
-    [(unity:multi-assignment* vars _)
-     (let ([assignment-count (length vars)])       
-       (try-synth 0 assignment-count))]))
-
-(define (synthesize-assign unity-assign unity-cxt verilog-cxt unity-state verilog-state)
-  (define (single-assign assign)
-    (match assign
-      [(unity:assign* guard multi)
-       (let* ([verilog-guard (synthesize-expression guard
-                                                    unity-cxt
-                                                    verilog-cxt
-                                                    unity-state
-                                                    verilog-state)]
-              [guard-assertion (eval verilog-guard verilog-cxt verilog-state)]
-              [verilog-multi (synthesize-multi-assignment multi
-                                                          unity-cxt
-                                                          verilog-cxt
-                                                          unity-state
-                                                          verilog-state
-                                                          guard-assertion)])
-         (if* verilog-guard verilog-multi '()))]))
-
-  (if (null? unity-assign)
-      '()
-      (cons (single-assign (car unity-assign))
-            (synthesize-assign (cdr unity-assign) unity-cxt verilog-cxt unity-state verilog-state))))
-
 (define (generate-externals cxt)
   (match cxt
     [(context* inputs outputs _ _) (append inputs outputs)]))
@@ -172,32 +103,109 @@
      (append (map wire* wires)
              (map reg* regs))]))
 
+(define (scaffold-module name verilog-cxt reset-sketch assign-sketch)
+  (module* name (generate-externals verilog-cxt)
+    (generate-io-constraints verilog-cxt)
+    (generate-type-declarations verilog-cxt)
+    (list (always* (list (posedge* 'clock))
+                   (list (if* (not* (val* 'reset))
+                              reset-sketch
+                              assign-sketch))))))
+
+(define (interpret-module-wrapper verilog-module state reset)
+  (let ([reset-val (not reset)])
+    (interpret-module verilog-module
+                      (append (list (cons 'reset reset-val)
+                                    (cons 'clock #t))
+                              state)
+                      (list (posedge* 'clock)))))
+
+(define (synth-reset unity-program name)
+  (let* ([unity-cxt (unity-sem:interpret-unity-declare unity-program)]
+         [verilog-cxt (unity-to-verilog-cxt unity-cxt)]
+         [unity-start (unity-symbolic-state unity-program)]
+         [verilog-start (verilog-symbolic-state verilog-cxt unity-cxt unity-start)])
+
+    (define (try-synth exp-depth assign-depth)
+      (if (> exp-depth max-expression-depth)
+          'exp-depth-exceeded
+          (let* ([reset-sketch (assignment?? assign-depth
+                                             exp-depth
+                                             verilog-cxt)]
+                 [module (scaffold-module name
+                                          verilog-cxt
+                                          reset-sketch
+                                          '())]
+                 [unity-reset-state (unity-sem:interpret-unity-initially unity-program
+                                                                         unity-start)]
+                 [verilog-reset-state (interpret-module-wrapper module
+                                                                verilog-start
+                                                                #t)]
+                 [synth (synthesize
+                         #:forall unity-start
+                         #:guarantee
+                         (assert
+                          (unity-verilog-state-eq? unity-cxt
+                                                   verilog-cxt
+                                                   unity-reset-state
+                                                   verilog-reset-state)))])
+            (if (eq? synth (unsat))
+                (try-synth (+ 1 exp-depth) assign-depth)
+                (evaluate reset-sketch synth)))))
+
+    (match unity-program
+      [(unity:unity* _ _ assignments)
+       (let* ([num-write (length (cdr unity-cxt))])
+         (try-synth 0 num-write))])))
+
 (define (synthesize-verilog-program unity-program name)
-  (match unity-program
-    [(unity:unity* declare
-                   initially
-                   assign)
-     (let* ([unity-cxt (unity-sem:interpret-declare declare)]
-            [verilog-cxt (unity-to-verilog-cxt unity-cxt)]
-            [unity-start (unity-symbolic-state unity-program)]
-            [verilog-start (verilog-symbolic-state verilog-cxt unity-cxt unity-start)]
-            [verilog-reset (synthesize-multi-assignment initially
-                                                        unity-cxt
-                                                        verilog-cxt
-                                                        unity-start
-                                                        verilog-start
-                                                        #t)]
-            [verilog-assign (synthesize-assign assign
-                                               unity-cxt
-                                               verilog-cxt
-                                               unity-start
-                                               verilog-start)])
-       (module* name (generate-externals verilog-cxt)
-         (generate-io-constraints verilog-cxt)
-         (generate-type-declarations verilog-cxt)
-         (list (always* (list (posedge* 'clock) (negedge* 'reset))
-                        (list (if* (not* (val* 'reset))
-                                   verilog-reset
-                                   verilog-assign))))))]))
+  (let* ([unity-cxt (unity-sem:interpret-unity-declare unity-program)]
+         [verilog-cxt (unity-to-verilog-cxt unity-cxt)]
+         [unity-start (unity-symbolic-state unity-program)]
+         [verilog-start (verilog-symbolic-state verilog-cxt unity-cxt unity-start)])
+
+    (define (try-synth exp-depth assign-depth cond-depth reset-sketch)
+      (if (> exp-depth max-expression-depth)
+          'exp-depth-exceeded
+          (let* ([assign-sketch (guarded-stmt?? cond-depth
+                                                exp-depth
+                                                assign-depth
+                                                verilog-cxt)]
+                 [module (scaffold-module name
+                                          verilog-cxt
+                                          reset-sketch
+                                          assign-sketch)]
+                 [unity-reset-state (unity-sem:interpret-unity-initially unity-program
+                                                                         unity-start)]
+                 [verilog-reset-state (interpret-module-wrapper module
+                                                                verilog-start
+                                                                #t)]
+                 [unity-next-state (unity-sem:interpret-unity-assign unity-program
+                                                                     unity-start)]
+                 [verilog-next-state (interpret-module-wrapper module
+                                                               verilog-start
+                                                               #f)]
+                 [synth (synthesize
+                         #:forall unity-start
+                         #:assume (unity-verilog-state-eq? unity-cxt
+                                                           verilog-cxt
+                                                           unity-reset-state
+                                                           verilog-reset-state)
+                         #:guarantee
+                         (assert
+                          (unity-verilog-state-eq? unity-cxt
+                                                   verilog-cxt
+                                                   unity-next-state
+                                                   verilog-next-state)))])
+            (if (eq? synth (unsat))
+                (try-synth (+ 1 exp-depth) assign-depth cond-depth reset-sketch)
+                (evaluate module synth)))))
+
+    (match unity-program
+      [(unity:unity* _ _ assignments)
+       (let* ([num-write (length (cdr unity-cxt))]
+              [num-assignments (length assignments)]
+              [reset-sketch (synth-reset unity-program name)])
+         (try-synth 0 num-write num-assignments reset-sketch))])))
 
 (provide synthesize-verilog-program)
