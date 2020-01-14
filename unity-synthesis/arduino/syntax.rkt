@@ -44,8 +44,6 @@
 (struct if* (exp left) #:transparent)
 
 ;; Sequencing
-(struct seq* (left right) #:transparent)
-
 (define (emit-block block)
   (list "{"
         block
@@ -54,7 +52,7 @@
 (define (emit-statements statements)
   (match statements
     ['() '()]
-    [(seq* fst snd)
+    [(cons fst snd)
      (let ([fst-strings            
             (match fst
               [(var* ident) (format "int ~a;" ident)]
@@ -85,12 +83,7 @@
              (emit-block (emit-statements loop)))]))
    "\n" #:after-last "\n"))
 
-(define (seq-append left right)
-  (match left
-    [(seq* fst snd) (seq* fst (seq-append snd right))]
-    ['() right]))
-
-(provide arduino* setup* loop* and* or* eq* neq* not* read* ref* var* pin-mode* write!* set!* if* seq* seq-append emit-program)
+(provide arduino* setup* loop* and* or* eq* neq* not* read* ref* var* pin-mode* write!* set!* if* emit-program)
 
 ;; Example syntax
 ;; (arduino* (setup* (seq* (var* 'x)

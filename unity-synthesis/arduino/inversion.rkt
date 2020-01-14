@@ -1,14 +1,15 @@
 #lang rosette
 
-(require "syntax.rkt"
+(require "environment.rkt"
+         "semantics.rkt"
+         "syntax.rkt"
          rosette/lib/angelic)
 
 ;; Inversion over expressions
-(define (exp?? depth env)
-  (define (fill-terminals env stub)
-    (let ([vars (car env)]
-          [pins (append (cadr env)
-                        (cddr env))])
+(define (exp?? depth cxt)
+  (define (fill-terminals cxt stub)
+    (let ([vars (context-vars cxt)]
+          [pins (context-readable-pins cxt)])
       (cond
         [(and (pair? pins)
               (pair? vars))
@@ -31,67 +32,66 @@
   (if (positive? depth)
       (let ([stub (list 'true
                         'false
-                        (not* (exp?? (- depth 1) env))
+                        (not* (exp?? (- depth 1) cxt))
                         ((choose* and*
                                   or*
                                   eq*
                                   neq*)
-                         (exp?? (- depth 1) env)
-                         (exp?? (- depth 1) env)))])
-        (fill-terminals env stub))
+                         (exp?? (- depth 1) cxt)
+                         (exp?? (- depth 1) cxt)))])
+        (fill-terminals cxt stub))
       (let ([stub (list 'true
                         'false)])
-        (fill-terminals env stub))))
+        (fill-terminals cxt stub))))
 
 ;; Inversion over statements
-(define (stmt?? exp-depth stmt-depth env)
+(define (stmt?? exp-depth stmt-depth cxt)
   (if (positive? stmt-depth)
-      (let ([stub (stmt?? exp-depth (- stmt-depth 1) env)]
-            [vars (car env)]
-            [pins (cddr env)])
+      (let ([stub (stmt?? exp-depth (- stmt-depth 1) cxt)]
+            [vars (context-vars cxt)]
+            [pins (context-writable-pins cxt)])
         (cond
           [(and (pair? pins)
                 (pair? vars))
-           (seq* (choose* (write!* (apply choose* pins)
-                                   (exp?? exp-depth env))
+           (cons (choose* (write!* (apply choose* pins)
+                                   (exp?? exp-depth cxt))
                           (set!* (apply choose* vars)
-                                 (exp?? exp-depth env)))
+                                 (exp?? exp-depth cxt)))
                  stub)]
           [(and (pair? pins)
                 (null? vars))
-           (seq* (choose* (write!* (apply choose* pins)
-                                   (exp?? exp-depth env)))
+           (cons (choose* (write!* (apply choose* pins)
+                                   (exp?? exp-depth cxt)))
                  stub)]
           [(and (null? pins)
                 (pair? vars))
-           (seq* (choose* (set!* (apply choose* vars)
-                                 (exp?? exp-depth env)))
+           (cons (choose* (set!* (apply choose* vars)
+                                 (exp?? exp-depth cxt)))
                  stub)]
           [else '()]))
       '()))
 
 ;; Inversion over declarations
-(define (decl?? depth env)
+(define (decl?? depth cxt)
   (if (positive? depth)
-      (let ([stub (decl?? (- depth 1) env)]
-            [vars (car env)]
-            [pins (append (cadr env)
-                          (cddr env))])
+      (let ([stub (decl?? (- depth 1) cxt)]
+            [vars (context-vars cxt)]
+            [pins (context-readable-pins cxt)])
         (cond
           [(and (pair? pins)
                 (pair? vars))
-           (seq* (choose* (pin-mode* (apply choose* pins)
+           (cons (choose* (pin-mode* (apply choose* pins)
                                      (choose* 'input 'output))
                           (var* (apply choose* vars)))
                  stub)]
           [(and (pair? pins)
                 (null? vars))
-           (seq* (pin-mode* (apply choose* pins)
+           (cons (pin-mode* (apply choose* pins)
                             (choose* 'input 'output))
                  stub)]
           [(and (null? pins)
                 (pair? vars))
-           (seq* (var* (apply choose* vars))
+           (cons (var* (apply choose* vars))
                  stub)]
           [else '()]))
       '()))
