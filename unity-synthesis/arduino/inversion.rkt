@@ -71,6 +71,16 @@
           [else '()]))
       '()))
 
+(define (guarded-stmt?? guard-count assign-count expression-depth cxt)
+  (if (positive? guard-count)
+      (cons (if* (exp?? expression-depth cxt)
+                 (stmt?? expression-depth assign-count cxt))
+            (guarded-stmt?? (- 1 guard-count)
+                            assign-count
+                            expression-depth
+                            cxt))
+      '()))
+
 ;; Inversion over declarations
 (define (decl?? depth cxt)
   (if (positive? depth)
@@ -96,4 +106,4 @@
           [else '()]))
       '()))
 
-(provide exp?? stmt?? decl??)
+(provide exp?? stmt?? guarded-stmt?? decl??)

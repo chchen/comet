@@ -21,10 +21,25 @@
 (define empty-vector
   (list->vector '()))
 
-;; Transforms a UNITY declaration clause and returns a pair:
+;; The Arduino model admits two different sorts of mutable references:
+;; variables and pins. Variables are used for internal state, and pins
+;; are used for external state (input/output). UNITY has no such
+;; distinction, although we could refine the language to allow for
+;; one.
+;;
+;; The current strategy for showing equivalence is to say that a
+;; mapping exists between each UNITY reference and an Arduino pin. We
+;; say that two programs are equivalent if interpreting them given
+;; equivalent initial states produces equivalent subsequent states.
+;;
+;; If we have a UNITY symbolic state, we need to derive an equivalent
+;; Arduino symbolic state. That's what this function is for. It does
+;; this in two steps:
+;;
+;; Transforms a UNITY program and returns a pair:
 ;; 1) The arduino context
-;; 2) A procedure that takes a unity state and returns the appropriate
-;;  arduino state vector
+;; 2) A function from a UNITY state to an Arduino state
+;; representation.
 (define (unity-to-arduino-env prog)
   (define (unity-ref-list pin pin-limit unity-state mapping)
     (if (>= pin pin-limit)
@@ -95,39 +110,6 @@
 
     (try-synth 0)))
 
-;; Synthesizes an Arduino boolean expression equivalent to the
-;; given UNITY guard
-(define (guard-synth guard prog)
-  (let* ([arduino-env (unity-to-arduino-env prog)]
-         [arduino-cxt (car arduino-env)]
-         [unity-to-arduino-state (cdr arduino-env)])
-    
-    (define (param-guard-synth sketch)
-      (let ([unity-state (unity-symbolic-state prog)]
-            [unity-cxt (unity-sem:interpret-unity-declare prog)])
-        (synthesize
-         #:forall unity-state
-         #:guarantee (assert
-                      (equal?
-                       (arduino-sem:evaluate sketch
-                                             arduino-cxt
-                                             (unity-to-arduino-state unity-state))
-                       (unity-sem:evaluate
-                        guard
-                        unity-cxt
-                        unity-state))))))
-
-    (define (try-synth depth)
-      (if (> depth max-expression-depth)
-          'exp-depth-exceeded
-          (let* ([sketch (exp?? depth arduino-cxt)]
-                 [synth (param-guard-synth sketch)])
-            (if (eq? synth (unsat))
-                (try-synth (+ 1 depth))
-                (evaluate sketch synth)))))
-
-    (try-synth 0)))
-
 ;; Synthesizes a sequence of Arduino statements equivalent to
 ;; a UNITY multi-assignment, given an optional Arduino implementation
 ;; of a guarded expression
@@ -171,32 +153,52 @@
        (let ([assignment-count (length vs)])
          (try-synth 0 assignment-count))])))
 
-;; Synthesize a sequence of Arduino statements, each guarded with
-;; a boolean expression, equivalent to a set of UNITY guarded multi-assignments
-(define (assign-synth assigns prog)
-  (if (pair? assigns)
-      (match (car assigns)
-        [(unity:assign* guard multi)
-         (cons
-          (let ([guard-impl (guard-synth guard prog)])
-            (let ([multi-impl (multi-synth guard-impl multi prog)])
-              (if* guard-impl
-                   multi-impl)))
-          (assign-synth (cdr assigns) prog))])
-      '()))
+;; Synthesize an entire Arduino program from a UNITY spec
+(define (synthesize-arduino-program unity-program)
+  (let* ([unity-state (unity-symbolic-state unity-program)]
+         [unity-cxt (unity-sem:interpret-unity-declare unity-program)]
+         [arduino-env (unity-to-arduino-env unity-program)]
+         [arduino-cxt (car arduino-env)]
+         [unity-to-arduino-state (cdr arduino-env)])
 
-;; Synthesize an entire program equivalent to a UNITY program
-(define (prog-synth prog)
-  (match prog
+    (define (assign-synth sketch)
+      (synthesize
+       #:forall unity-state
+       #:guarantee (let ([arduino-next-state
+                          (arduino-sem:interpret sketch
+                                                 arduino-cxt
+                                                 (unity-to-arduino-state unity-state))]
+                         [unity-next-state
+                          (unity-sem:interpret-unity-assign unity-program
+                                                            unity-state)])
+                     (assert
+                      (equal? (state-pins arduino-next-state)
+                              (state-pins (unity-to-arduino-state unity-next-state)))))))
+
+    (define (try-synth guard-count assign-count exp-depth)
+      (if (> exp-depth max-expression-depth)
+          'exp-depth-exceeded
+          (let* ([sketch (guarded-stmt?? guard-count assign-count exp-depth arduino-cxt)]
+                 [synth (assign-synth sketch)])
+            (if (eq? synth (unsat))
+                (try-synth guard-count assign-count (+ 1 exp-depth))
+                (evaluate sketch synth)))))
+
+  (match unity-program
     [(unity:unity* declare initially assign)
-     (arduino*
-      (setup*
-       (append (decl-synth prog)
-                   (multi-synth 'true initially prog)))
-      (loop*
-       (assign-synth assign prog)))]))
+     (let* ([declare-impl (decl-synth unity-program)]
+            [initially-impl (multi-synth 'true initially unity-program)]
+            [guard-clauses (length assign)]
+            [writable-pins (length (context-writable-pins arduino-cxt))]
+            [assign-impl (try-synth guard-clauses writable-pins 0)])
+       (arduino*
+        (setup*
+         (append declare-impl
+                 initially-impl))
+        (loop*
+         assign-impl)))])))
 
-(provide prog-synth)
+(provide synthesize-arduino-program)
 
 ;; Synthesis playground follows...
 ;; (define-symbolic var-a var-b boolean?)
