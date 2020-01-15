@@ -164,7 +164,7 @@
          [unity-start (unity-symbolic-state unity-program)]
          [verilog-start (verilog-symbolic-state verilog-cxt unity-cxt unity-start)])
 
-    (define (try-synth exp-depth assign-depth cond-depth reset-sketch)
+    (define (try-synth exp-depth assign-depth cond-depth reset-impl)
       (if (> exp-depth max-expression-depth)
           'exp-depth-exceeded
           (let* ([assign-sketch (guarded-stmt?? cond-depth
@@ -173,7 +173,7 @@
                                                 verilog-cxt)]
                  [module (scaffold-module name
                                           verilog-cxt
-                                          reset-sketch
+                                          reset-impl
                                           assign-sketch)]
                  [unity-reset-state (unity-sem:interpret-unity-initially unity-program
                                                                          unity-start)]
@@ -198,14 +198,14 @@
                                                    unity-next-state
                                                    verilog-next-state)))])
             (if (eq? synth (unsat))
-                (try-synth (+ 1 exp-depth) assign-depth cond-depth reset-sketch)
+                (try-synth (+ 1 exp-depth) assign-depth cond-depth reset-impl)
                 (evaluate module synth)))))
 
     (match unity-program
       [(unity:unity* _ _ assignments)
        (let* ([num-write (length (cdr unity-cxt))]
               [num-assignments (length assignments)]
-              [reset-sketch (synth-reset unity-program name)])
-         (try-synth 0 num-write num-assignments reset-sketch))])))
+              [reset-impl (synth-reset unity-program name)])
+         (try-synth 0 num-write num-assignments reset-impl))])))
 
 (provide synthesize-verilog-program)
