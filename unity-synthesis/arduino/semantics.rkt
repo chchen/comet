@@ -8,25 +8,28 @@
          rosette/lib/synthax)
 
 ;; Evaluation function for expressions
-(define (evaluate exp cxt state)
-  (let ([cxt-vars (context-vars cxt)]
-        [cxt-pins (context-readable-pins cxt)]
-        [st-vars (state-vars state)]
-        [st-pins (state-pins state)])
-    (match exp
-      [(and* a b) (and (evaluate a cxt state) (evaluate b cxt state))]
-      [(or* a b) (or (evaluate a cxt state) (evaluate b cxt state))]
-      [(eq* a b) (eq? (evaluate a cxt state) (evaluate b cxt state))]
-      [(neq* a b) (not (eq? (evaluate a cxt state) (evaluate b cxt state)))]
-      [(not* e) (not (evaluate e cxt state))]
-      [(read* p) (if (in-list? p cxt-pins)
-                     (vector-ref st-pins p)
+(define (evaluate expression environment)
+  (match environment
+    [(environment*
+      (context* cxt-vars
+                cxt-read-pins
+                cxt-write-pins)
+      (state* st-vars
+              st-pins))
+     (match expression
+       [(and* a b) (and (evaluate a environment) (evaluate b environment))]
+       [(or* a b) (or (evaluate a environment) (evaluate b environment))]
+       [(eq* a b) (eq? (evaluate a environment) (evaluate b environment))]
+       [(neq* a b) (not (eq? (evaluate a environment) (evaluate b environment)))]
+       [(not* e) (not (evaluate e environment))]
+       [(read* p) (if (in-list? p cxt-read-pins)
+                      (vector-ref st-pins p)
+                      'typerr)]
+       [(ref* v) (if (in-list? v cxt-vars)
+                     (vector-ref st-vars v)
                      'typerr)]
-      [(ref* v) (if (in-list? v cxt-vars)
-                    (vector-ref st-vars v)
-                    'typerr)]
-      ['true #t]
-      ['false #f])))
+       ['true #t]
+       ['false #f])]))
 
 (define-symbolic A B boolean?)
 
@@ -71,63 +74,120 @@
 ;;                             (list 1)))))
 
 ;; Interpretation function for sequences of statements
-(define (interpret stmt cxt state)
-  (let ([cxt-vars (context-vars cxt)]
-        [cxt-pins (context-writable-pins cxt)]
-        [st-vars (state-vars state)]
-        [st-pins (state-pins state)])
-    (match stmt
-      [(cons left right)
-       (match left
-         [(write!* p exp) (if (in-list? p cxt-pins)
-                              (interpret right
-                                         cxt
-                                         (state* st-vars
-                                                 (update! st-pins p (evaluate exp cxt state))))
-                              'typerr)]
-         [(set!* v exp) (if (in-list? v cxt-vars)
-                            (interpret right
-                                       cxt
-                                       (state* (update! st-vars v (evaluate exp cxt state))
-                                               st-pins))
-                            'typerr)]
-         [(if* test then-branch) (if (evaluate test cxt state)
-                                     (interpret right cxt (interpret then-branch cxt state))
-                                     (interpret right cxt state))])]
-      ['() state])))
+;; (define (interpret stmt cxt state)
+;;   (let ([cxt-vars (context-vars cxt)]
+;;         [cxt-pins (context-writable-pins cxt)]
+;;         [st-vars (state-vars state)]
+;;         [st-pins (state-pins state)])
+;;     (match stmt
+;;       [(cons left right)
+;;        (match left
+;;          [(write!* p exp) (if (in-list? p cxt-pins)
+;;                               (interpret right
+;;                                          cxt
+;;                                          (state* st-vars
+;;                                                  (update! st-pins p (evaluate exp cxt state))))
+;;                               'typerr)]
+;;          [(set!* v exp) (if (in-list? v cxt-vars)
+;;                             (interpret right
+;;                                        cxt
+;;                                        (state* (update! st-vars v (evaluate exp cxt state))
+;;                                                st-pins))
+;;                             'typerr)]
+;;          [(if* test then-branch) (if (evaluate test cxt state)
+;;                                      (interpret right cxt (interpret then-branch cxt state))
+;;                                      (interpret right cxt state))])]
+;;       ['() state])))
+
+(define (interpret stmt environment)
+  (match environment
+    [(environment* context state)
+     (match context
+       [(context* cxt-vars
+                  cxt-read-pins
+                  cxt-write-pins)
+        (match state
+          [(state* st-vars
+                   st-pins)
+           (match stmt
+             [(cons left right)
+              (match left
+                ;; add a new variable to the context
+                [(var* id) (interpret right
+                                      (environment*
+                                       (context* (cons id cxt-vars)
+                                                 cxt-read-pins
+                                                 cxt-write-pins)
+                                       state))]
+                ;; add a new pin to the context
+                [(pin-mode* id mode) (interpret right
+                                                (environment*
+                                                 (context* cxt-vars
+                                                           (cons id cxt-read-pins)
+                                                           (if (eq? mode 'output)
+                                                               (cons id cxt-write-pins)
+                                                               cxt-write-pins))
+                                                 state))]
+                ;; write a new pin value to state
+                [(write!* p exp) (if (in-list? p cxt-write-pins)
+                                     (interpret right
+                                                (environment*
+                                                 context
+                                                 (state* st-vars
+                                                         (update! st-pins p (evaluate exp environment)))))
+                                     'typerr)]
+                ;; write a new variable value to state
+                [(set!* v exp) (if (in-list? v cxt-vars)
+                                   (interpret right
+                                              (environment*
+                                               context
+                                               (state* (update! st-vars v (evaluate exp environment))
+                                                       st-pins)))
+                                   'typerr)]
+                ;; conditional
+                [(if* test then-branch) (if (evaluate test environment)
+                                            (interpret right (interpret then-branch environment))
+                                            (interpret right environment))])]
+                ['() environment])])])]))
 
 (assert
  (equal?
-  (interpret (list (write!* 0 (ref* 0)))
-             (context* (list 0)
-                       '()
-                       (list 0))
-             (state* (list->vector '(A))
-                     (list->vector '(B))))
+  (env-state
+   (interpret (list (write!* 0 (ref* 0)))
+              (environment*
+               (context* (list 0)
+                         '()
+                         (list 0))
+               (state* (list->vector '(A))
+                       (list->vector '(B))))))
   (state* (list->vector '(A))
           (list->vector '(A)))))
 
 (assert
  (equal?
-  (interpret (list (if* (eq* (read* 0) (read* 0))
-                        (list (set!* 0 (read* 0)))))
-             (context* (list 0)
-                       (list 0)
-                       '())
-             (state* (list->vector '(A))
-                     (list->vector '(B))))
+  (env-state
+   (interpret (list (if* (eq* (read* 0) (read* 0))
+                         (list (set!* 0 (read* 0)))))
+              (environment*
+               (context* (list 0)
+                         (list 0)
+                         '())
+               (state* (list->vector '(A))
+                       (list->vector '(B))))))
   (state* (list->vector '(B))
           (list->vector '(B)))))
 
 (assert
  (equal?
-  (interpret (list (if* (neq* (read* 0) (read* 0))
-                        (list (set!* 0 (read* 0)))))
-             (context* (list 0)
-                       (list 0)
-                       '())
-             (state* (list->vector '(A))
-                     (list->vector '(B))))
+  (env-state
+   (interpret (list (if* (neq* (read* 0) (read* 0))
+                         (list (set!* 0 (read* 0)))))
+              (environment*
+               (context* (list 0)
+                         (list 0)
+                         '())
+               (state* (list->vector '(A))
+                       (list->vector '(B))))))
   (state* (list->vector '(A))
           (list->vector '(B)))))
 

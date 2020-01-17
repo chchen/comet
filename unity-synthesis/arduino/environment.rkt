@@ -1,10 +1,19 @@
 #lang rosette
 
+(struct environment* (context state) #:transparent)
 (struct context* (vars read-pins write-pins) #:transparent)
 (struct state* (vars pins) #:transparent)
 
 (define empty-context
   (context* '() '() '()))
+
+(define (env-context env)
+  (match env
+    [(environment* c _) c]))
+
+(define (env-state env)
+  (match env
+    [(environment* _ s) s]))
 
 (define (context-vars cxt)
   (match cxt
@@ -26,9 +35,12 @@
   (match state
     [(state* _ p) p]))
 
-(provide context*
+(provide environment*
+         context*
          state*
          empty-context
+         env-context
+         env-state
          context-vars
          context-readable-pins
          context-writable-pins
