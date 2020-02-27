@@ -1,86 +1,110 @@
 #lang rosette
 
+(require "../util.rkt")
+
+;; ;; Types
+;; ;; We currently support boolean variables
+;; ;; and unidirectional channels that (can) contain booleans
+;; (define (valid-type? t)
+;;   (in-list? t
+;;             (list 'boolean 'channel-read 'channel-write)))
+
+;; (define (valid-read? t)
+;;   (valid-type? t))
+
+;; (define (valid-write? t)
+;;   (in-list? t
+;;             (list 'boolean 'channel-write)))
+
 ;; Top-level syntax.
 ;; A UNITY program consists of a triple:
-;; 1) a list of declaration clauses that define the variables in scope
-;;   and if they're readable, writable, or both
-;; 2) an initial multi-assignment
-;; 3) a list of guarded multi-assignments
+;; 1) a declaration of variable types
+;; 2) an initial (multi-)assignment
+;; 3) a list of (multi-)assignments
 (struct unity*
-  (declarations
-   initial-multi-assignment
-   guarded-multi-assignments)
+  (declare
+   initially
+   assign)
   #:transparent)
 
 ;; Declaration clause.
-;; A declaration is a pair:
-;; 1) a identifier (an atom: a number or symbol)
-;; 2) a mode ('read, 'write, 'readwrite)
+;; A list of pairs:
+;; 1) a identifier (a symbol)
+;; 2) a type
 (struct declare*
-  (identifier
-   mode)
+  (variable-declarations)
   #:transparent)
 
-;; Guarded multi-assignment clause.
-;; An assignment is a pair:
-;; 1) a boolean expression, called the guard
-;; 2) a multi-assignment
+;; Initially section
+;; Contains an assignment statement.
+(struct initially*
+  (assignment-statement)
+  #:transparent)
+
+;; Assign section
+;; Contains a list of assignment statements.
 (struct assign*
-  (guard*
-   multi-assignment*)
+  (assignment-statements)
   #:transparent)
 
-;; Guard expressions.
+;; Assignment statement
+;; 1) List of variables to set
+;; 2) A list of expressions that yield values OR
+;;    A case statement
+(struct :=*
+  (variables
+   expressions)
+  #:transparent)
+
+;; Assignment-by-cases
+;; Contains a list of pairs
+;; 1) A list of expressions
+;; 2) A boolean expression
+(struct case*
+  (case-list)
+  #:transparent)
+
+;; Expressions
 ;; These terms combine into arbitrary boolean expressions.
-;; Base expressions are one of: #t | #f | (ref* identifier)
+;; Terminals are: #t, #f, 'empty
 ;; Variable reference
-(struct ref* (var) #:transparent)
 ;; Negation
 (struct not* (exp) #:transparent)
 ;; Logical AND
 (struct and*
-  (exp-l*
-   exp-r*)
+  (left
+   right)
   #:transparent)
 ;; Logical OR
 (struct or*
-  (exp-l*
-   exp-r)
+  (left
+   right)
   #:transparent)
 ;; Equality
-(struct eq*
-  (exp-l
-   exp-r)
-  #:transparent)
-
-;; Multi-assignment.
-;; A multi-assignment is a pair:
-;; 1) A list of variable identifiers
-;; 2) A list of boolean expressions
-(struct multi-assignment*
-  (variables
-   expressions)
+(struct eq?*
+  (left
+   right)
   #:transparent)
 
 ;; Export the following from the module:
 (provide unity*
          declare*
+         initially*
          assign*
-         ref*
+         :=*
+         case*
          not*
          and*
          or*
-         eq*
-         multi-assignment*)
+         eq?*)
 
 ;; Example syntax
 
 ;; (unity*
-;;  (list (declare* 0 'readwrite)
-;;        (declare* 1 'readwrite))
-;;  (multi-assignment* (list 0 1)
-;;                     (list #t #f))
-;;  (list (assign* (not* (eq* (ref* 0) (ref* 1)))
-;;                 (multi-assignment* (list 0 1)
-;;                                    (list (ref* 1)
-;;                                          (ref* 0))))))
+;;  (declare* (list (cons 'reg 'boolean)
+;;                  (cons 'out 'channel-write)))
+;;  (initially* (:=* (list 'reg 'out)
+;;                   (list #f 'empty)))
+;;  (assign* (list (:=* (list 'reg 'out)
+;;                      (case* (list (cons (list (not* 'reg) 'reg)
+;;                                         (eq?* 'out 'empty))))))))
