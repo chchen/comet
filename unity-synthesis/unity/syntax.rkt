@@ -68,22 +68,30 @@
 ;; These terms combine into arbitrary boolean expressions.
 ;; Terminals are: #t, #f, 'empty
 ;; Variable reference
-;; Negation
+;; Negation (Bool -> Bool)
 (struct not* (exp) #:transparent)
-;; Logical AND
+;; Logical AND (Bool x Bool -> Bool)
 (struct and*
   (left
    right)
   #:transparent)
-;; Logical OR
+;; Logical OR (Bool x Bool -> Bool)
 (struct or*
   (left
    right)
   #:transparent)
-;; Equality
+;; Equality (Bool x Bool -> Bool)
 (struct eq?*
   (left
    right)
+  #:transparent)
+;; Channel emptiness (Channel -> Bool)
+(struct empty?*
+  (chan)
+  #:transparent)
+;; Channel fullness (Channel -> Bool)
+(struct full?*
+  (chan)
   #:transparent)
 
 ;; Export the following from the module:
@@ -96,7 +104,9 @@
          not*
          and*
          or*
-         eq?*)
+         eq?*
+         empty?*
+         full?*)
 
 ;; Example syntax
 

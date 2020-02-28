@@ -15,8 +15,8 @@
   (cons (cons id val) state))
 
 ;; Evaluate a boolean expression. Takes an expression and a state
-(define (evaluate expression state)
-  (match expression
+(define (evaluate expr state)
+  (match expr
     [(not* e) (not (evaluate e state))]
     [(and* l r) (and (evaluate l state)
                      (evaluate r state))]
@@ -24,10 +24,16 @@
                    (evaluate r state))]
     [(eq?* l r) (eq? (evaluate l state)
                      (evaluate r state))]
-    ['empty 'empty]
-    [#t #t]
-    [#f #f]
-    [v (state-get v state)]))
+    [(full?* c) (match (evaluate c state)
+                  ['empty #f]
+                  ['unknown #f]
+                  [_ #t])]
+    [(empty?* c) (match (evaluate c state)
+                   ['empty #t]
+                   [_ #t])]
+    [t (if (symbol? t)
+           (state-get t state)
+           t)]))
 
 ;; Interpret an assignment statement
 ;;
