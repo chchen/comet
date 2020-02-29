@@ -46,27 +46,38 @@
   (and (list? declarations)
        (check declarations '())))
 
-;; Check if expression types to a boolean in a context
-(define (boolean-expression? expr cxt)
+;; Generic expression checker, takes an expression, a context, and a predicate
+;; for allowable types
+(define (expression-ok-helper? expr cxt term-type?)
   (match expr
-    [(not* e) (boolean-expression? e cxt)]
-    [(and* l r) (and (boolean-expression? l cxt)
-                     (boolean-expression? r cxt))]
-    [(or* l r) (and (boolean-expression? l cxt)
-                    (boolean-expression? r cxt))]
-    [(eq?* l r) (and (boolean-expression? l cxt)
-                     (boolean-expression? r cxt))]
+    [(not* e) (expression-ok-helper? e cxt term-type?)]
+    [(and* l r) (and (expression-ok-helper? l cxt term-type?)
+                     (expression-ok-helper? r cxt term-type?))]
+    [(or* l r) (and (expression-ok-helper? l cxt term-type?)
+                    (expression-ok-helper? r cxt term-type?))]
+    [(eq?* l r) (and (expression-ok-helper? l cxt term-type?)
+                     (expression-ok-helper? r cxt term-type?))]
     [(full?* c) (channel-type? (cxt-lookup c cxt))]
     [(empty?* c) (channel-type? (cxt-lookup c cxt))]
     [t (if (symbol? t)
-           (valid-type? (cxt-lookup t cxt))
+           (term-type? (cxt-lookup t cxt))
            (boolean? t))]))
 
-(define (assignment-ok? assignment cxt)
-  (define (extract-expressions cond-exps)
-    (map car cond-exps))
+;; Expression checker that allows terminals to be any valid type
+(define (expression-ok? expr cxt)
+  (expression-ok-helper? expr cxt valid-type?))
 
-  (define (vars-exps-ok? vars exps)
+;; Expression checker that only allows channel terminals only over channel
+;; predicates. Any other terminal must be a boolean
+(define (guard-ok? expr cxt)
+  (expression-ok-helper?
+   expr
+   cxt
+   (lambda (type)
+     (eq? 'boolean type))))
+
+(define (assignment-ok? assignment cxt)
+  (define (vars-exps-ok? vars exps guard)
     (if (and (pair? vars)
              (pair? exps))
         (let* ([v (car vars)]
@@ -76,26 +87,31 @@
                [e-tail (cdr exps)])
           (and
            (match v-type
-             ['boolean (boolean-expression? e cxt)]
-             ['channel-write (boolean-expression? e cxt)]
+             ['boolean (expression-ok? e cxt)]
+             ['channel-write (expression-ok? e cxt)]
              ['channel-read (eq? e 'empty)]
              [_ (error "oops")])
-           (vars-exps-ok? v-tail e-tail)))
+           (vars-exps-ok? v-tail e-tail guard)))
         #t))
 
   (match assignment
-    [(:=* vars (case* cond-exps))
-     (foldl (lambda (exps ok)
-              (and ok
-                   (equal-length? vars exps)
-                   (vars-exps-ok? vars exps)))
+    [(:=* vars (case* exprs-guards))
+     (foldl (lambda (exps-guard ok)
+              (match exps-guard
+                [(cons exps guard)
+                 (and ok
+                      (equal-length? vars exps)
+                      (guard-ok? guard cxt)
+                      (vars-exps-ok? vars exps guard))]
+                [_ #f]))
             #t
-            (extract-expressions cond-exps))]
+            exprs-guards)]
     [(:=* vars exps)
      (and (equal-length? vars exps)
-          (vars-exps-ok? vars exps))]))
+          (vars-exps-ok? vars exps #t))]))
 
-(boolean-expression? (and* (full?* 'a) #f) (list (cons 'a 'channel-write)))
+(expression-ok? (and* (full?* 'a) #f)
+                (list (cons 'a 'channel-write)))
 
 (assignment-ok?
  (:=* '(a b)
@@ -105,7 +121,7 @@
 
 (assignment-ok?
  (:=* '(a b)
-      (case* (list (cons '(#t #f) #t)
-                   (cons '(#t 'a) #f))))
+      (case* (list (cons '(#t a) (not* 'c)))))
  (list (cons 'a 'boolean)
-       (cons 'b 'boolean)))
+       (cons 'b 'boolean)
+       (cons 'c 'channel-read)))
