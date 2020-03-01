@@ -2,19 +2,27 @@
 
 (require "../util.rkt")
 
-;; ;; Types
-;; ;; We currently support boolean variables
-;; ;; and unidirectional channels that (can) contain booleans
-;; (define (valid-type? t)
-;;   (in-list? t
-;;             (list 'boolean 'channel-read 'channel-write)))
+;; Channel types.
+;; Channels are declared as 'channel-read or 'channel-write but the state
+;; representation is the channel* struct, which contains two fields:
+;; 1) validity
+;; 2) value
+(struct channel*
+  (valid
+   value)
+  #:transparent)
 
-;; (define (valid-read? t)
-;;   (valid-type? t))
+;; Channel syntactic forms
+;; Construct a message Bool -> Channel
+(struct message*
+  (value)
+  #:transparent)
 
-;; (define (valid-write? t)
-;;   (in-list? t
-;;             (list 'boolean 'channel-write)))
+;; Destruct a message Channel -> Bool
+;; Partial Function! Only defined for valid channels
+(struct value*
+  (channel)
+  #:transparent)
 
 ;; Top-level syntax.
 ;; A UNITY program consists of a triple:
@@ -95,7 +103,12 @@
   #:transparent)
 
 ;; Export the following from the module:
-(provide unity*
+(provide channel*
+         channel*-valid
+         channel*-value
+         message*
+         value*
+         unity*
          declare*
          initially*
          assign*
@@ -113,8 +126,12 @@
 ;; (unity*
 ;;  (declare* (list (cons 'reg 'boolean)
 ;;                  (cons 'out 'channel-write)))
-;;  (initially* (:=* (list 'reg 'out)
-;;                   (list #f 'empty)))
-;;  (assign* (list (:=* (list 'reg 'out)
-;;                      (case* (list (cons (list (not* 'reg) 'reg)
-;;                                         (eq?* 'out 'empty))))))))
+;;  (initially* (:=* (list 'reg
+;;                         'out)
+;;                   (list #f
+;;                         'empty)))
+;;  (assign* (list (:=* (list 'reg
+;;                            'out)
+;;                      (case* (list (cons (list (not* 'reg)
+;;                                               (message* 'reg))
+;;                                         (empty?* 'out))))))))

@@ -17,6 +17,8 @@
 ;; Evaluate a boolean expression. Takes an expression and a state
 (define (evaluate expr state)
   (match expr
+    [(message* e) (channel* #t (evaluate e state))]
+    [(value* c) (channel*-value (evaluate c state))]
     [(not* e) (not (evaluate e state))]
     [(and* l r) (and (evaluate l state)
                      (evaluate r state))]
@@ -24,15 +26,12 @@
                    (evaluate r state))]
     [(eq?* l r) (eq? (evaluate l state)
                      (evaluate r state))]
-    [(full?* c) (match (evaluate c state)
-                  ['empty #f]
-                  ['unknown #f]
-                  [_ #t])]
-    [(empty?* c) (match (evaluate c state)
-                   ['empty #t]
-                   [_ #t])]
+    [(full?* c) (channel*-valid (evaluate c state))]
+    [(empty?* c) (not (channel*-valid (evaluate c state)))]
     [t (if (symbol? t)
-           (state-get t state)
+           (match t
+             ['empty (channel* #f 'inaccessible)]
+             [_ (state-get t state)])
            t)]))
 
 ;; Interpret an assignment statement
@@ -45,15 +44,15 @@
 ;; boolean expression guard is satisified. If no guards are satisified, then the
 ;; start state is returned.
 (define (interpret-assign-stmt assignment state)
-  (define (filter-expressions cond-exps state)
-    (match cond-exps
+  (define (filter-expressions exps-guards state)
+    (match exps-guards
       [(cons (cons exps guard) tail)
        (if (evaluate guard state)
            exps
            (filter-expressions tail state))]
       [_ '()]))
 
-  (define (commit vars exps from-st to-st)
+  (define (commit vars exps current-st next-st)
     (if (and (pair? vars)
              (pair? exps))
         (let ([v (car vars)]
@@ -62,15 +61,15 @@
               [e-tail (cdr exps)])
           (commit v-tail
                   e-tail
-                  from-st
-                  (state-put v
-                             (evaluate e from-st)
-                             to-st)))
-        to-st))
+                  current-st
+                 (state-put v
+                             (evaluate e current-st)
+                             next-st)))
+        next-st))
 
   (match assignment
-    [(:=* vars (case* cond-exps))
-    (let ([exps (filter-expressions cond-exps state)])
+    [(:=* vars (case* exps-guards))
+     (let ([exps (filter-expressions exps-guards state)])
        (if (null? exps)
            state
            (commit vars exps state state)))]
@@ -119,9 +118,20 @@
 
 ;; Sample Program
 
-;; (unity* (declare* (list (cons 'reg 'boolean)
+;; (let* ([prog
+;;        (unity*
+;;         (declare* (list (cons 'reg 'boolean)
 ;;                         (cons 'out 'channel-write)))
-;;         (initially* (:=* (list 'reg 'out)
-;;                          (list #f 'empty)))
-;;         (assign* (list (:=* (list 'out)
-;;                             (list 'reg)))))
+;;         (initially* (:=* (list 'reg
+;;                                'out)
+;;                          (list #f
+;;                                'empty)))
+;;         (assign* (list (:=* (list 'reg
+;;                                   'out)
+;;                             (case* (list (cons (list (not* 'reg)
+;;                                                      (message* 'reg))
+;;                                                (empty?* 'out))))))))]
+;;        [env (interpret-declare prog)]
+;;        [env2 (interpret-initially prog env)]
+;;        [env3 (interpret-assign prog env2)])
+;;   (list env env2 env3))
