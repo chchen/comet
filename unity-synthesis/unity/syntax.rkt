@@ -104,6 +104,7 @@
 
 ;; Export the following from the module:
 (provide channel*
+         channel*?
          channel*-valid
          channel*-value
          message*

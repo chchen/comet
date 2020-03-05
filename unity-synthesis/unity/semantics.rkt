@@ -4,33 +4,26 @@
          "syntax.rkt"
          rosette/lib/match)
 
-;; The latest value of the variable id in the state store.
-(define (state-get id state)
-  (match (assoc id state)
-    [(cons _ val) val]
-    [_ (error 'state-get "no mapping for ~a in state store ~a" id state)]))
-
-;; Adds a new value mapping for variable id in the state store
-(define (state-put id val state)
-  (cons (cons id val) state))
-
-;; Evaluate a boolean expression. Takes an expression and a state
-(define (evaluate expr state)
+;; Evaluate an expression. Takes an expression and a state
+(define (evaluate-expr expr state)
   (match expr
-    [(message* e) (channel* #t (evaluate e state))]
-    [(value* c) (channel*-value (evaluate c state))]
-    [(not* e) (not (evaluate e state))]
-    [(and* l r) (and (evaluate l state)
-                     (evaluate r state))]
-    [(or* l r) (or (evaluate l state)
-                   (evaluate r state))]
-    [(eq?* l r) (eq? (evaluate l state)
-                     (evaluate r state))]
-    [(full?* c) (channel*-valid (evaluate c state))]
-    [(empty?* c) (not (channel*-valid (evaluate c state)))]
+    [(message* e) (channel* #t (evaluate-expr e state))]
+    [(value* c) (let ([c-val (evaluate-expr c state)])
+                  (if (channel*-valid c-val)
+                      (channel*-value c-val)
+                      'error))]
+    [(not* e) (not (evaluate-expr e state))]
+    [(and* l r) (and (evaluate-expr l state)
+                     (evaluate-expr r state))]
+    [(or* l r) (or (evaluate-expr l state)
+                   (evaluate-expr r state))]
+    [(eq?* l r) (eq? (evaluate-expr l state)
+                     (evaluate-expr r state))]
+    [(full?* c) (channel*-valid (evaluate-expr c state))]
+    [(empty?* c) (not (channel*-valid (evaluate-expr c state)))]
     [t (if (symbol? t)
            (match t
-             ['empty (channel* #f 'inaccessible)]
+             ['empty (channel* #f null)]
              [_ (state-get t state)])
            t)]))
 
@@ -44,32 +37,46 @@
 ;; boolean expression guard is satisified. If no guards are satisified, then the
 ;; start state is returned.
 (define (interpret-assign-stmt assignment state)
-  (define (filter-expressions exps-guards state)
+  (define (assign-ok? lval rval)
+    (if (eq? rval 'error)
+        #f
+        (match lval
+          [(channel* #f _) (and (channel*? rval)
+                                (channel*-valid rval))]
+          [(channel* #t _) (and (channel*? rval)
+                                (not (channel*-valid rval)))]
+          [_ #t])))
+
+  (define (filter-expressions exps-guards)
     (match exps-guards
       [(cons (cons exps guard) tail)
-       (if (evaluate guard state)
+       (if (evaluate-expr guard state)
            exps
-           (filter-expressions tail state))]
+           (filter-expressions tail))]
       [_ '()]))
 
   (define (commit vars exps current-st next-st)
     (if (and (pair? vars)
              (pair? exps))
-        (let ([v (car vars)]
-              [e (car exps)]
-              [v-tail (cdr vars)]
-              [e-tail (cdr exps)])
-          (commit v-tail
-                  e-tail
-                  current-st
-                 (state-put v
-                             (evaluate e current-st)
-                             next-st)))
+        (let* ([v (car vars)]
+               [v-val (state-get v current-st)]
+               [e (car exps)]
+               [e-val (evaluate-expr e current-st)]
+               [v-tail (cdr vars)]
+               [e-tail (cdr exps)])
+          (if (assign-ok? v-val e-val)
+              (commit v-tail
+                      e-tail
+                      current-st
+                      (state-put v
+                                 e-val
+                                 next-st))
+              'error))
         next-st))
 
   (match assignment
     [(:=* vars (case* exps-guards))
-     (let ([exps (filter-expressions exps-guards state)])
+     (let ([exps (filter-expressions exps-guards)])
        (if (null? exps)
            state
            (commit vars exps state state)))]
@@ -83,6 +90,11 @@
     [(unity* (declare* type-declarations) _ _)
      (environment* type-declarations '())]))
 
+(define (error-wrapper st f)
+  (if (eq? st 'error)
+      st
+      (f st)))
+
 ;; Interpret the initially cause, given an existing environment with a context
 ;; and a state
 (define (interpret-initially program env)
@@ -90,9 +102,10 @@
     [(unity* _ (initially* initial-assignment) _)
      (match env
        [(environment* cxt state)
-        (environment* cxt
-                      (interpret-assign-stmt initial-assignment
-                                             state))])]))
+        (error-wrapper
+         (interpret-assign-stmt initial-assignment state)
+         (lambda (st)
+           (environment* cxt st)))])]))
 
 ;; Interpret the assign clause, given an existing environment with a context and
 ;; a state
@@ -105,33 +118,35 @@
     [(unity* _ _ (assign* assign-statements))
      (match env
        [(environment* cxt state)
-        (environment* cxt
-                      (interpret-assign-stmt
-                       (pick-stmt assign-statements)
-                       state))])]))
+        (error-wrapper
+         (interpret-assign-stmt (pick-stmt assign-statements) state)
+         (lambda (st)
+           (environment* cxt st)))])]))
 
-(provide state-get
-         evaluate
+(provide evaluate-expr
          interpret-declare
          interpret-initially
          interpret-assign)
 
-;; Sample Program
+;; Test
 
-;; (let* ([prog
-;;        (unity*
-;;         (declare* (list (cons 'reg 'boolean)
-;;                         (cons 'out 'channel-write)))
-;;         (initially* (:=* (list 'reg
-;;                                'out)
-;;                          (list #f
-;;                                'empty)))
-;;         (assign* (list (:=* (list 'reg
-;;                                   'out)
-;;                             (case* (list (cons (list (not* 'reg)
-;;                                                      (message* 'reg))
-;;                                                (empty?* 'out))))))))]
-;;        [env (interpret-declare prog)]
-;;        [env2 (interpret-initially prog env)]
-;;        [env3 (interpret-assign prog env2)])
-;;   (list env env2 env3))
+(let* ([prog
+        (unity*
+         (declare* (list (cons 'reg 'boolean)
+                         (cons 'out 'channel-write)))
+         (initially* (:=* (list 'reg
+                                'out)
+                          (list #f
+                                'empty)))
+         (assign* (list (:=* (list 'reg
+                                   'out)
+                             (case* (list (cons (list (not* 'reg)
+                                                      (message* 'reg))
+                                                (empty?* 'out))))))))]
+       [env (interpret-declare prog)]
+       [env2 (interpret-initially prog env)]
+       [env3 (interpret-assign prog env2)])
+  (assert
+   (and (environment*? env)
+        (environment*? env2)
+        (environment*? env3))))
