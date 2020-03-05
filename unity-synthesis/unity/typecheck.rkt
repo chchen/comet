@@ -1,12 +1,15 @@
 #lang rosette
 
-(require "syntax.rkt"
-         "../util.rkt")
+(require "environment.rkt"
+         "semantics.rkt"
+         "syntax.rkt"
+         "../util.rkt"
+         rosette/lib/match)
 
 (define (reserved-symbol? symbol)
   (match symbol
     ['empty #t]
-    ['unknown #t]
+    ['error #t]
     [_ #f]))
 
 (define (valid-identifier? id)
@@ -19,17 +22,6 @@
     ['channel-read #t]
     ['channel-write #t]
     [_ #f]))
-
-(define (channel-type? type)
-  (match type
-    ['channel-read #t]
-    ['channel-write #t]
-    [_ #f]))
-
-(define (cxt-lookup id cxt)
-  (match (assoc id cxt)
-    [(cons _ type) type]
-    [_ (error 'cxt-lookup "no type mapping for ~a in context ~a" id cxt)]))
 
 ;; Validate a declaration clause. Each pair if (id, type) must be a valid id
 ;; (not a reserved symbol, valid type) and each id should be declared only once
@@ -46,35 +38,76 @@
   (and (list? declarations)
        (check declarations '())))
 
+;; ¡Construct a symbolic state!
+(define (symbolic-state cxt)
+  (define (symbolic-boolean)
+    (define-symbolic* x boolean?)
+    x)
+
+  (match cxt
+    ['() '()]
+    [(cons (cons x 'boolean) tail)
+     (cons (cons x (symbolic-boolean))
+           (symbolic-state tail))]
+    [(cons (cons x 'channel-write) tail)
+     (cons (cons x (channel* (symbolic-boolean)
+                             (symbolic-boolean)))
+           (symbolic-state tail))]
+    [(cons (cons x 'channel-read) tail)
+     (cons (cons x (channel* (symbolic-boolean)
+                             (symbolic-boolean)))
+           (symbolic-state tail))]))
+
+(define (boolean-under-guard? expr guard cxt)
+  (let* ([state (symbolic-state cxt)]
+         [model
+          (verify
+           #:assume
+           (assert (evaluate-expr guard state))
+           #:guarantee
+           (assert (boolean? (evaluate-expr expr state))))])
+    (if (eq? (unsat) model)
+        #t
+        (error 'expr-guard-check "counterexample ~a" (evaluate state model)))))
+
 ;; Generic expression checker, takes an expression, a context, and a predicate
 ;; for allowable types
-(define (expression-ok-helper? expr cxt term-type?)
-  (match expr
-    [(not* e) (expression-ok-helper? e cxt term-type?)]
-    [(and* l r) (and (expression-ok-helper? l cxt term-type?)
-                     (expression-ok-helper? r cxt term-type?))]
-    [(or* l r) (and (expression-ok-helper? l cxt term-type?)
-                    (expression-ok-helper? r cxt term-type?))]
-    [(eq?* l r) (and (expression-ok-helper? l cxt term-type?)
-                     (expression-ok-helper? r cxt term-type?))]
-    [(full?* c) (channel-type? (cxt-lookup c cxt))]
-    [(empty?* c) (channel-type? (cxt-lookup c cxt))]
-    [t (if (symbol? t)
-           (term-type? (cxt-lookup t cxt))
-           (boolean? t))]))
+(define (guarded-expression-ok? expr cxt type guard)
+  (define (subtree-ok? expr type)
+    (match expr
+      [(message* e) (and (eq? type 'channel-write)
+                         (subtree-ok? e 'boolean))]
+      [(value* c) (and (eq? type 'boolean)
+                       (boolean-under-guard? expr guard cxt)
+                       (subtree-ok? c 'channel-read))]
+      [(not* e) (and (eq? type 'boolean)
+                     (subtree-ok? e 'boolean))]
+      [(and* l r) (and (eq? type 'boolean)
+                       (subtree-ok? l 'boolean)
+                       (subtree-ok? r 'boolean))]
+      [(or* l r) (and (eq? type 'boolean)
+                      (subtree-ok? l 'boolean)
+                      (subtree-ok? r 'boolean))]
+      [(eq?* l r) (and (eq? type 'boolean)
+                       (subtree-ok? l 'boolean)
+                       (subtree-ok? r 'boolean))]
+      [(full?* c) (and (eq? type 'boolean)
+                       (subtree-ok? c 'channel-read))]
+      [(empty?* c) (and (eq? type 'boolean)
+                        (subtree-ok? c 'channel-write))]
+      [t (cond
+           [(boolean? t)
+            (eq? type 'boolean)]
+           [(eq? t 'empty)
+            (eq? type 'channel-write)]
+           [(symbol? t)
+            (eq? type (cxt-lookup t cxt))]
+           [else #f])]))
 
-;; Expression checker that allows terminals to be any valid type
-(define (expression-ok? expr cxt)
-  (expression-ok-helper? expr cxt valid-type?))
+  (subtree-ok? expr type))
 
-;; Expression checker that only allows channel terminals only over channel
-;; predicates. Any other terminal must be a boolean
-(define (guard-ok? expr cxt)
-  (expression-ok-helper?
-   expr
-   cxt
-   (lambda (type)
-     (eq? 'boolean type))))
+(define (expression-ok? expr cxt type)
+  (guarded-expression-ok? expr cxt type #t))
 
 (define (assignment-ok? assignment cxt)
   (define (vars-exps-ok? vars exps guard)
@@ -85,13 +118,13 @@
                [e (car exps)]
                [v-tail (cdr vars)]
                [e-tail (cdr exps)])
-          (and
-           (match v-type
-             ['boolean (expression-ok? e cxt)]
-             ['channel-write (expression-ok? e cxt)]
-             ['channel-read (eq? e 'empty)]
-             [_ (error "oops")])
-           (vars-exps-ok? v-tail e-tail guard)))
+            (and
+             (match v-type
+               ['boolean (guarded-expression-ok? e cxt 'boolean guard)]
+               ['channel-write (guarded-expression-ok? e cxt 'channel-write guard)]
+               ['channel-read (guarded-expression-ok? e cxt 'channel-read guard)]
+               [_ (error "oops")])
+             (vars-exps-ok? v-tail e-tail guard)))
         #t))
 
   (match assignment
@@ -101,7 +134,7 @@
                 [(cons exps guard)
                  (and ok
                       (equal-length? vars exps)
-                      (guard-ok? guard cxt)
+                      (expression-ok? guard cxt 'boolean)
                       (vars-exps-ok? vars exps guard))]
                 [_ #f]))
             #t
@@ -110,18 +143,38 @@
      (and (equal-length? vars exps)
           (vars-exps-ok? vars exps #t))]))
 
-(expression-ok? (and* (full?* 'a) #f)
-                (list (cons 'a 'channel-write)))
+;; Hello tests
+(assert (expression-ok? (and* (full?* 'a) #f)
+                        (list (cons 'a 'channel-read))
+                        'boolean))
 
-(assignment-ok?
- (:=* '(a b)
-      '(b a))
- (list (cons 'a 'boolean)
-       (cons 'b 'boolean)))
+(assert (guarded-expression-ok? (value* 'a)
+                                (list (cons 'a 'channel-read))
+                                'boolean
+                                (full?* 'a)))
 
-(assignment-ok?
- (:=* '(a b)
-      (case* (list (cons '(#t a) (not* 'c)))))
- (list (cons 'a 'boolean)
-       (cons 'b 'boolean)
-       (cons 'c 'channel-read)))
+(assert (assignment-ok?
+         (:=* '(a b)
+              '(b a))
+         (list (cons 'a 'boolean)
+               (cons 'b 'boolean))))
+
+(assert (assignment-ok?
+         (:=* '(a b)
+              (case* (list (cons (list #t 'a)
+                                 (empty?* 'c)))))
+         (list (cons 'a 'boolean)
+               (cons 'b 'boolean)
+               (cons 'c 'channel-write))))
+
+(assert (expression-ok? (full?* 'c)
+                        (list (cons 'a 'boolean)
+                              (cons 'c 'channel-read))
+                        'boolean))
+
+(assert (assignment-ok?
+         (:=* (list 'a)
+              (case* (list (cons (list (value* 'c))
+                                 (full?* 'c)))))
+         (list (cons 'a 'boolean)
+               (cons 'c 'channel-read))))
