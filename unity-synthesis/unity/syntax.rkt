@@ -2,9 +2,7 @@
 
 (require "../util.rkt")
 
-;; Channel types.
-;; Channels are declared as 'channel-read or 'channel-write but the state
-;; representation is the channel* struct, which contains two fields:
+;; Channel types. Two fields:
 ;; 1) validity
 ;; 2) value
 (struct channel*
@@ -93,11 +91,11 @@
   (left
    right)
   #:transparent)
-;; Channel emptiness (Channel -> Bool)
+;; Channel not valid (Channel -> Bool)
 (struct empty?*
   (chan)
   #:transparent)
-;; Channel fullness (Channel -> Bool)
+;; Channel valid (Channel -> Bool)
 (struct full?*
   (chan)
   #:transparent)
@@ -126,7 +124,7 @@
 
 ;; (unity*
 ;;  (declare* (list (cons 'reg 'boolean)
-;;                  (cons 'out 'channel-write)))
+;;                  (cons 'out 'channel)))
 ;;  (initially* (:=* (list 'reg
 ;;                         'out)
 ;;                   (list #f

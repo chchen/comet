@@ -38,4 +38,6 @@
          state-get
          state-put
          environment*
-         environment*?)
+         environment*?
+         environment*-context
+         environment*-state)
