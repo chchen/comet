@@ -1,5 +1,7 @@
 #lang rosette
 
+(require "../util.rkt")
+
 (define (mapping? map)
   (if (null? map)
       #t
@@ -12,16 +14,6 @@
     [(cons _ type) type]
     [_ (error 'cxt-lookup "no type mapping for ~a in context ~a" id cxt)]))
 
-;; The latest value of the variable id in the state store.
-(define (state-get id state)
-  (match (assoc id state)
-    [(cons _ val) val]
-    [_ null]))
-
-;; Adds a new value mapping for variable id in the state store
-(define (state-put id val state)
-  (cons (cons id val) state))
-
 (struct environment*
   (context
    state)
@@ -31,12 +23,10 @@
               [(and (mapping? cxt)
                     (mapping? st))
                (values cxt st)]
-              [else (error type-name "bad vals: ~a ~a" cxt st)])))
+              [else (error type-name "bad env: ~a ~a" cxt st)])))
 
 (provide mapping?
          cxt-lookup
-         state-get
-         state-put
          environment*
          environment*?
          environment*-context

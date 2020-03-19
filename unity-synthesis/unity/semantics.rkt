@@ -1,6 +1,7 @@
 #lang rosette
 
-(require "environment.rkt"
+(require "../util.rkt"
+         "environment.rkt"
          "syntax.rkt"
          rosette/lib/match)
 
