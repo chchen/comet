@@ -7,190 +7,165 @@
          rosette/lib/match
          rosette/lib/synthax)
 
-;; Evaluation function for expressions
-(define (evaluate expression environment)
-  (match environment
-    [(environment*
-      (context* cxt-vars
-                cxt-read-pins
-                cxt-write-pins)
-      (state* st-vars
-              st-pins))
-     (match expression
-       [(and* a b) (and (evaluate a environment) (evaluate b environment))]
-       [(or* a b) (or (evaluate a environment) (evaluate b environment))]
-       [(eq* a b) (eq? (evaluate a environment) (evaluate b environment))]
-       [(neq* a b) (not (eq? (evaluate a environment) (evaluate b environment)))]
-       [(not* e) (not (evaluate e environment))]
-       [(read* p) (if (in-list? p cxt-read-pins)
-                      (vector-ref st-pins p)
-                      'typerr)]
-       [(ref* v) (if (in-list? v cxt-vars)
-                     (vector-ref st-vars v)
-                     'typerr)]
-       ['true #t]
-       ['false #f])]))
+(define (pin-type? t)
+  (match t
+    ['pin-in #t]
+    ['pin-out #t]
+    [_ #f]))
 
+(define (booleans? l r)
+  (and (boolean? l)
+       (boolean? r)))
+
+(define (same-type? l r)
+  (or (booleans? l r)
+      (and (level*? l)
+           (level*? r))))
+
+(define (eval-and l r)
+  (and l r))
+
+(define (eval-or l r)
+  (or l r))
+
+(define (eval-eq l r)
+  (eq? l r))
+
+(define (eval-not e)
+  (not e))
+
+;; Evaluate
+(define (evaluate-expr expression context state)
+  (define (unexp expr test next)
+    (let ([val (eval-helper expr)])
+      (if (test val)
+          (next val)
+          (error 'unexp "type mismatch ~a" expr))))
+
+  (define (binexp left right test next)
+    (let ([val-l (eval-helper left)]
+          [val-r (eval-helper right)])
+      (if (test val-l val-r)
+          (next val-l val-r)
+          (error 'binexp "type mismatch ~a ~a" left right))))
+
+  (define (eval-helper expr)
+    (match expr
+      [(and* l r) (binexp l r booleans? eval-and)]
+      [(or* l r) (binexp l r booleans? eval-or)]
+      [(eq* l r) (binexp l r same-type? eval-eq)]
+      [(not* e) (unexp e boolean? eval-not)]
+      [(read* p) (if (pin-type? (get-mapping p context))
+                     (get-mapping p state)
+                     (error 'read "type mismatch ~a" p))]
+      ['false #f]
+      ['true #t]
+      ['LOW (level* #f)]
+      ['HIGH (level* #t)]
+      [v (if (eq? (get-mapping v context) 'bool)
+             (get-mapping v state)
+             (error 'deref "type mismatch ~a" v))]))
+
+  (eval-helper expression))
+
+(define (interpret-stmt statement context state)
+  (match statement
+    ['() (values context state)]
+    [(cons (bool* id) tail)
+     (interpret-stmt tail
+                     (add-mapping id 'bool context)
+                     state)]
+    [(cons (pin-mode* pin 'INPUT) tail)
+     (interpret-stmt tail
+                     (add-mapping pin 'pin-in context)
+                     state)]
+    [(cons (pin-mode* pin 'OUTPUT) tail)
+     (interpret-stmt tail
+                     (add-mapping pin 'pin-out context)
+                     state)]
+    [(cons (write* pin expr) tail)
+     (let ([typ (get-mapping pin context)]
+           [val (evaluate-expr expr context state)])
+       (if (and (eq? typ 'pin-out)
+                (level*? val))
+           (interpret-stmt tail
+                           context
+                           (add-mapping pin val state))
+           (error 'write "type mismatch ~a" statement)))]
+    [(cons (:=* var expr) tail)
+     (let ([typ (get-mapping var context)]
+           [val (evaluate-expr expr context state)])
+       (if (and (eq? typ 'bool)
+                (boolean? val))
+           (interpret-stmt tail
+                           context
+                           (add-mapping var val state))
+           (error 'assign "type mismatch ~a" statement)))]
+    [(cons (if* test left right) tail)
+     (let ([tval (evaluate-expr test context state)])
+       (if (boolean? tval)
+           (let*-values ([(branch-to-take) (if tval left right)]
+                         [(cxt st) (interpret-stmt branch-to-take context state)])
+             (interpret-stmt tail cxt st))
+           (error 'if "type mismatch ~a" statement)))]))
+
+(provide evaluate-expr
+         interpret-stmt)
+
+;; Tests
 (define-symbolic A B boolean?)
 
-;; (let ([in-pins (list->vector (list A))]
-;;       [in-refs (list->vector (list B))]
-;;       [env (cons '(0)
-;;                  (cons '(0) '()))])
-;;   (assert (equal? (evaluate (not* (and* (read* 0) (ref* 0)))
-;;                         env in-pins in-refs)
-;;                   (evaluate (or* (not* (read* 0)) (not* (ref* 0)))
-;;                         env in-pins in-refs))))
+(let ([context (list (cons 'a 'bool)
+                     (cons 'b 'bool)
+                     (cons 'd0 'pin-in)
+                     (cons 'd1 'pin-out))]
+      [state (list (cons 'a A)
+                   (cons 'b B)
+                   (cons 'd0 (level* A))
+                   (cons 'd1 (level* B)))])
+  (assert
+   (and
+    (equal? (evaluate-expr (not* (and* 'a 'b))
+                           context
+                           state)
+            (evaluate-expr (or* (not* 'a) (not* 'b))
+                           context
+                           state))
+    (boolean? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
+                             context
+                             state))
+    (level*? (evaluate-expr (read* 'd0)
+                            context
+                            state)))))
 
-(define (update! vec key val)
-  (vector-set! vec key val)
-  vec)
-
-;; Interpretation function for sequences of initialization statements
-;; Returns a context
-(define (interpret-decl declarations)
-  (define (helper decls variables read-pins write-pins)
-    (match decls
-      [(cons (var* id) tail) (helper tail
-                                     (cons id variables)
-                                     read-pins
-                                     write-pins)]
-      [(cons (pin-mode* id mode) tail) (helper tail
-                                               variables
-                                               (cons id read-pins)
-                                               (if (eq? mode 'output)
-                                                   (cons id write-pins)
-                                                   write-pins))]
-      ['() (context* variables read-pins write-pins)]))
-
-  (helper declarations '() '() '()))
-
-;; (assert (equal? (interpret-decl (seq* (var* 'x)
-;;                                       (seq* (pin-mode* 0 'input)
-;;                                             (seq* (pin-mode* 1 'output)
-;;                                                   null))))
-;;                 (cons (list 'x)
-;;                       (cons (list 1 0)
-;;                             (list 1)))))
-
-;; Interpretation function for sequences of statements
-;; (define (interpret stmt cxt state)
-;;   (let ([cxt-vars (context-vars cxt)]
-;;         [cxt-pins (context-writable-pins cxt)]
-;;         [st-vars (state-vars state)]
-;;         [st-pins (state-pins state)])
-;;     (match stmt
-;;       [(cons left right)
-;;        (match left
-;;          [(write!* p exp) (if (in-list? p cxt-pins)
-;;                               (interpret right
-;;                                          cxt
-;;                                          (state* st-vars
-;;                                                  (update! st-pins p (evaluate exp cxt state))))
-;;                               'typerr)]
-;;          [(set!* v exp) (if (in-list? v cxt-vars)
-;;                             (interpret right
-;;                                        cxt
-;;                                        (state* (update! st-vars v (evaluate exp cxt state))
-;;                                                st-pins))
-;;                             'typerr)]
-;;          [(if* test then-branch) (if (evaluate test cxt state)
-;;                                      (interpret right cxt (interpret then-branch cxt state))
-;;                                      (interpret right cxt state))])]
-;;       ['() state])))
-
-(define (interpret stmt environment)
-  (match environment
-    [(environment* context state)
-     (match context
-       [(context* cxt-vars
-                  cxt-read-pins
-                  cxt-write-pins)
-        (match state
-          [(state* st-vars
-                   st-pins)
-           (match stmt
-             [(cons left right)
-              (match left
-                ;; add a new variable to the context
-                [(var* id) (interpret right
-                                      (environment*
-                                       (context* (cons id cxt-vars)
-                                                 cxt-read-pins
-                                                 cxt-write-pins)
-                                       state))]
-                ;; add a new pin to the context
-                [(pin-mode* id mode) (interpret right
-                                                (environment*
-                                                 (context* cxt-vars
-                                                           (cons id cxt-read-pins)
-                                                           (if (eq? mode 'output)
-                                                               (cons id cxt-write-pins)
-                                                               cxt-write-pins))
-                                                 state))]
-                ;; write a new pin value to state
-                [(write!* p exp) (if (in-list? p cxt-write-pins)
-                                     (interpret right
-                                                (environment*
-                                                 context
-                                                 (state* st-vars
-                                                         (update! st-pins p (evaluate exp environment)))))
-                                     'typerr)]
-                ;; write a new variable value to state
-                [(set!* v exp) (if (in-list? v cxt-vars)
-                                   (interpret right
-                                              (environment*
-                                               context
-                                               (state* (update! st-vars v (evaluate exp environment))
-                                                       st-pins)))
-                                   'typerr)]
-                ;; conditional
-                [(if* test then-branch) (if (evaluate test environment)
-                                            (interpret right (interpret then-branch environment))
-                                            (interpret right environment))])]
-                ['() environment])])])]))
-
-(assert
- (equal?
-  (env-state
-   (interpret (list (write!* 0 (ref* 0)))
-              (environment*
-               (context* (list 0)
-                         '()
-                         (list 0))
-               (state* (list->vector '(A))
-                       (list->vector '(B))))))
-  (state* (list->vector '(A))
-          (list->vector '(A)))))
-
-(assert
- (equal?
-  (env-state
-   (interpret (list (if* (eq* (read* 0) (read* 0))
-                         (list (set!* 0 (read* 0)))))
-              (environment*
-               (context* (list 0)
-                         (list 0)
-                         '())
-               (state* (list->vector '(A))
-                       (list->vector '(B))))))
-  (state* (list->vector '(B))
-          (list->vector '(B)))))
-
-(assert
- (equal?
-  (env-state
-   (interpret (list (if* (neq* (read* 0) (read* 0))
-                         (list (set!* 0 (read* 0)))))
-              (environment*
-               (context* (list 0)
-                         (list 0)
-                         '())
-               (state* (list->vector '(A))
-                       (list->vector '(B))))))
-  (state* (list->vector '(A))
-          (list->vector '(B)))))
-
-(provide evaluate
-         interpret
-         interpret-decl)
+(let*-values ([(init-cxt init-st)
+               (interpret-stmt (list (bool* 'x)
+                                     (bool* 't)
+                                     (pin-mode* 'd0 'INPUT)
+                                     (pin-mode* 'd1 'OUTPUT)
+                                     (:=* 'x 'false)
+                                     (write* 'd1 'HIGH))
+                               '()
+                               '())]
+              [(if-cxt if-st)
+               (interpret-stmt (list (if* 't
+                                          (list (write* 'd1 'HIGH))
+                                          (list (write* 'd1 'LOW)))
+                                     (:=* 'x 'true))
+                               init-cxt
+                               (cons (cons 't A)
+                                     init-st))])
+  (assert (and (equal? (list (cons 'd1 'pin-out)
+                             (cons 'd0 'pin-in)
+                             (cons 't 'bool)
+                             (cons 'x 'bool))
+                       init-cxt)
+               (equal? (list (cons 'd1 (level* #t))
+                             (cons 'x #f))
+                       init-st)
+               (equal? (get-mapping 'd1 if-st)
+                       (level* A))
+               (equal? (get-mapping 'x if-st)
+                       #t)
+               (equal? if-cxt
+                       init-cxt))))

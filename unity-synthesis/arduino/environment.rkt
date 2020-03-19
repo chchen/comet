@@ -1,48 +1,77 @@
 #lang rosette
 
-(struct environment* (context state) #:transparent)
-(struct context* (vars read-pins write-pins) #:transparent)
-(struct state* (vars pins) #:transparent)
+(require "../util.rkt"
+         "syntax.rkt")
 
-(define empty-context
-  (context* '() '() '()))
+(define (identifier? id)
+  (define reserved-symbols
+    (list 'false
+          'true
+          'LOW
+          'HIGH
+          'INPUT
+          'OUTPUT))
 
-(define (env-context env)
-  (match env
-    [(environment* c _) c]))
+  (and (symbol? id)
+       (not (in-list? id reserved-symbols))))
 
-(define (env-state env)
-  (match env
-    [(environment* _ s) s]))
+(define (type? typ)
+  (define types
+    (list 'bool
+          'pin-in
+          'pin-out))
 
-(define (context-vars cxt)
-  (match cxt
-    [(context* v _ _) v]))
+  (in-list? typ types))
 
-(define (context-readable-pins cxt)
-  (match cxt
-    [(context* _ r _) r]))
+(define (context? cxt)
+  (cond
+    [(null? cxt) #t]
+    [(and (pair? cxt)
+          (pair? (car cxt)))
+     (and (identifier? (caar cxt))
+          (type? (cdar cxt))
+          (context? (cdr cxt)))]
+    [else #f]))
 
-(define (context-writable-pins cxt)
-  (match cxt
-    [(context* _ _ w) w]))
+(define (state? st)
+  (cond
+    [(null? st) #t]
+    [(and (pair? st)
+          (pair? (car st)))
+     (and (identifier? (caar st))
+          (or (boolean? (cdar st))
+              (level*? (cdar st)))
+          (state? (cdr st)))]
+    [else #f]))
 
-(define (state-vars state)
-  (match state
-    [(state* v _) v]))
+(struct environment*
+  (context
+   state)
+  #:transparent
+  #:guard (lambda (context state type-name)
+            (cond
+              [(and (context? context)
+                    (state? state))
+               (values context state)]
+              [else (error type-name
+                           "bad env: ~a ~a"
+                           context
+                           state)])))
 
-(define (state-pins state)
-  (match state
-    [(state* _ p) p]))
+(provide environment*)
 
-(provide environment*
-         context*
-         state*
-         empty-context
-         env-context
-         env-state
-         context-vars
-         context-readable-pins
-         context-writable-pins
-         state-vars
-         state-pins)
+;; Tests
+
+(assert
+ (and
+  (context? '())
+  (context? (list (cons 'x 'bool)
+                  (cons 'd0 'pin-in)
+                  (cons 'd1 'pin-out)))))
+
+(assert
+ (and
+  (state? '())
+  (state? (list (cons 'x #f)
+                (cons 'd0 #t)
+                (cons 'd1 #f)))))
