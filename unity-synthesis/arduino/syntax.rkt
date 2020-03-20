@@ -5,7 +5,7 @@
 (struct loop* (statements) #:transparent)
 
 ;; Boxed Datatypes
-(struct level* (lvl) #:transparent)
+(struct level* (val) #:transparent)
 
 ;; Expressions
 (struct and* (left right) #:transparent)
@@ -88,6 +88,7 @@
          loop*
          level*
          level*?
+         level*-val
          and*
          or*
          eq*
