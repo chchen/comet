@@ -3,6 +3,12 @@
 (require "../util.rkt"
          "syntax.rkt")
 
+(define byte*? (bitvector 8))
+
+(define false-byte (bv 0 8))
+
+(define true-byte (bv 1 8))
+
 (define (identifier? id)
   (define reserved-symbols
     (list 'false
@@ -17,7 +23,7 @@
 
 (define (type? typ)
   (define types
-    (list 'bool
+    (list 'byte
           'pin-in
           'pin-out))
 
@@ -39,8 +45,7 @@
     [(and (pair? st)
           (pair? (car st)))
      (and (identifier? (caar st))
-          (or (boolean? (cdar st))
-              (level*? (cdar st)))
+          (byte*? (cdar st))
           (state? (cdr st)))]
     [else #f]))
 
@@ -58,20 +63,23 @@
                            context
                            state)])))
 
-(provide environment*)
+(provide environment*
+         byte*?
+         false-byte
+         true-byte)
 
 ;; Tests
 
 (assert
  (and
   (context? '())
-  (context? (list (cons 'x 'bool)
+  (context? (list (cons 'x 'byte)
                   (cons 'd0 'pin-in)
                   (cons 'd1 'pin-out)))))
 
 (assert
  (and
   (state? '())
-  (state? (list (cons 'x #f)
-                (cons 'd0 #t)
-                (cons 'd1 #f)))))
+  (state? (list (cons 'x false-byte)
+                (cons 'd0 true-byte)
+                (cons 'd1 false-byte)))))

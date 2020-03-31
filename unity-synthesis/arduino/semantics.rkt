@@ -7,32 +7,59 @@
          rosette/lib/match
          rosette/lib/synthax)
 
+(define natural? exact-nonnegative-integer?)
+
 (define (pin-type? t)
   (match t
     ['pin-in #t]
     ['pin-out #t]
     [_ #f]))
 
-(define (booleans? l r)
-  (and (boolean? l)
-       (boolean? r)))
+(define (true-byte? b)
+  (not (bveq b false-byte)))
 
-(define (same-type? l r)
-  (or (booleans? l r)
-      (and (level*? l)
-           (level*? r))))
+(define (false-byte? b)
+  (bveq b false-byte))
 
-(define (eval-and l r)
-  (and l r))
-
-(define (eval-or l r)
-  (or l r))
-
-(define (eval-eq l r)
-  (eq? l r))
+;; Coerce bytes into boolean 0x0 or 0x1
+;; Non-zero bytes -> 0x1
+;; Zero bytes -> 0x0
+(define (bool-byte b)
+  (if (false-byte? b)
+      false-byte
+      true-byte))
 
 (define (eval-not e)
-  (not e))
+  (if (false-byte? e)
+      true-byte
+      false-byte))
+
+(define (eval-and l r)
+  (if (false-byte? l)
+      l
+      r))
+
+(define (eval-or l r)
+  (if (false-byte? l)
+      r
+      l))
+
+(define eval-le bvult)
+
+(define (eval-eq l r)
+  (if (bveq l r)
+      true-byte
+      false-byte))
+
+(define eval-add bvadd)
+
+(define eval-bwand bvand)
+
+(define eval-bwor bvor)
+
+(define eval-shl bvshl)
+
+(define eval-shr bvlshr)
 
 ;; Evaluate
 (define (evaluate-expr expression context state)
@@ -40,40 +67,48 @@
     (let ([val (eval-helper expr)])
       (if (test val)
           (next val)
-          (error 'unexp "type mismatch ~a" expr))))
+          (error 'unexp "type mismatch ~a state: ~a" expr state))))
 
   (define (binexp left right test next)
     (let ([val-l (eval-helper left)]
           [val-r (eval-helper right)])
-      (if (test val-l val-r)
+      (if (and (test val-l)
+               (test val-r))
           (next val-l val-r)
-          (error 'binexp "type mismatch ~a ~a" left right))))
+          (error 'binexp "type mismatch ~a ~a state: ~a" left right state))))
 
   (define (eval-helper expr)
     (match expr
-      [(and* l r) (binexp l r booleans? eval-and)]
-      [(or* l r) (binexp l r booleans? eval-or)]
-      [(eq* l r) (binexp l r same-type? eval-eq)]
-      [(not* e) (unexp e boolean? eval-not)]
+      [(not* e) (unexp e byte*? eval-not)]
+      [(and* l r) (binexp l r byte*? eval-and)]
+      [(or* l r) (binexp l r byte*? eval-or)]
+      [(le* l r) (binexp l r byte*? eval-le)]
+      [(eq* l r) (binexp l r byte*? eval-eq)]
+      [(add* l r) (binexp l r byte*? eval-add)]
+      [(bwand* l r) (binexp l r byte*? eval-bwand)]
+      [(bwor* l r) (binexp l r byte*? eval-bwor)]
+      [(shl* b d) (binexp b d byte*? eval-shl)]
+      [(shr* b d) (binexp b d byte*? eval-shr)]
       [(read* p) (if (pin-type? (get-mapping p context))
-                     (get-mapping p state)
+                     (bool-byte (get-mapping p state))
                      (error 'read "type mismatch ~a" p))]
-      ['false #f]
-      ['true #t]
-      ['LOW (level* #f)]
-      ['HIGH (level* #t)]
-      [v (if (eq? (get-mapping v context) 'bool)
-             (get-mapping v state)
-             (error 'deref "type mismatch ~a" v))]))
+      ['false false-byte]
+      ['true true-byte]
+      ['LOW false-byte]
+      ['HIGH true-byte]
+      [v (cond
+           [(eq? (get-mapping v context) 'byte) (get-mapping v state)]
+           [(natural? v) (bv v 8)]
+           [else (error 'deref "type mismatch ~a" v)])]))
 
   (eval-helper expression))
 
 (define (interpret-stmt statement context state)
   (match statement
     ['() (values context state)]
-    [(cons (bool* id) tail)
+    [(cons (byte* id) tail)
      (interpret-stmt tail
-                     (add-mapping id 'bool context)
+                     (add-mapping id 'byte context)
                      state)]
     [(cons (pin-mode* pin 'INPUT) tail)
      (interpret-stmt tail
@@ -87,24 +122,24 @@
      (let ([typ (get-mapping pin context)]
            [val (evaluate-expr expr context state)])
        (if (and (eq? typ 'pin-out)
-                (level*? val))
+                (byte*? val))
            (interpret-stmt tail
                            context
-                           (add-mapping pin val state))
+                           (add-mapping pin (bool-byte val) state))
            (error 'write "type mismatch ~a" statement)))]
     [(cons (:=* var expr) tail)
      (let ([typ (get-mapping var context)]
            [val (evaluate-expr expr context state)])
-       (if (and (eq? typ 'bool)
-                (boolean? val))
+       (if (and (eq? typ 'byte)
+                (byte*? val))
            (interpret-stmt tail
                            context
                            (add-mapping var val state))
            (error 'assign "type mismatch ~a" statement)))]
     [(cons (if* test left right) tail)
      (let ([tval (evaluate-expr test context state)])
-       (if (boolean? tval)
-           (let*-values ([(branch-to-take) (if tval left right)]
+       (if (byte*? tval)
+           (let*-values ([(branch-to-take) (if (true-byte? tval) left right)]
                          [(cxt st) (interpret-stmt branch-to-take context state)])
              (interpret-stmt tail cxt st))
            (error 'if "type mismatch ~a" statement)))]))
@@ -113,16 +148,18 @@
          interpret-stmt)
 
 ;; Tests
-(define-symbolic A B boolean?)
+(define-symbolic A B (bitvector 8))
 
-(let ([context (list (cons 'a 'bool)
-                     (cons 'b 'bool)
+(let ([context (list (cons 'a 'byte)
+                     (cons 'b 'byte)
+                     (cons 'c 'byte)
                      (cons 'd0 'pin-in)
                      (cons 'd1 'pin-out))]
       [state (list (cons 'a A)
                    (cons 'b B)
-                   (cons 'd0 (level* A))
-                   (cons 'd1 (level* B)))])
+                   (cons 'c (bv 42 8))
+                   (cons 'd0 (bool-byte A))
+                   (cons 'd1 (bool-byte B)))])
   (assert
    (and
     (equal? (evaluate-expr (not* (and* 'a 'b))
@@ -131,16 +168,22 @@
             (evaluate-expr (or* (not* 'a) (not* 'b))
                            context
                            state))
-    (boolean? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
+    (equal? (evaluate-expr 'c
+                           context
+                           state)
+            (evaluate-expr 42
+                           context
+                           state))
+    (byte*? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
                              context
                              state))
-    (level*? (evaluate-expr (read* 'd0)
+    (byte*? (evaluate-expr (read* 'd0)
                             context
                             state)))))
 
 (let*-values ([(init-cxt init-st)
-               (interpret-stmt (list (bool* 'x)
-                                     (bool* 't)
+               (interpret-stmt (list (byte* 'x)
+                                     (byte* 't)
                                      (pin-mode* 'd0 'INPUT)
                                      (pin-mode* 'd1 'OUTPUT)
                                      (:=* 'x 'false)
@@ -157,15 +200,15 @@
                                      init-st))])
   (assert (and (equal? (list (cons 'd1 'pin-out)
                              (cons 'd0 'pin-in)
-                             (cons 't 'bool)
-                             (cons 'x 'bool))
+                             (cons 't 'byte)
+                             (cons 'x 'byte))
                        init-cxt)
-               (equal? (list (cons 'd1 (level* #t))
-                             (cons 'x #f))
+               (equal? (list (cons 'd1 true-byte)
+                             (cons 'x false-byte))
                        init-st)
                (equal? (get-mapping 'd1 if-st)
-                       (level* A))
+                       A)
                (equal? (get-mapping 'x if-st)
-                       #t)
+                       true-byte)
                (equal? if-cxt
                        init-cxt))))

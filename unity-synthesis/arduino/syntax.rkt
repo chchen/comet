@@ -4,15 +4,32 @@
 (struct setup* (statements) #:transparent)
 (struct loop* (statements) #:transparent)
 
-;; Boxed Datatypes
-(struct level* (val) #:transparent)
+;; In the Arduino model, internal state is represented
+;; in 8-bit unsigned bitvectors
 
-;; Expressions
+;; Traditional "Boolean" Expressions
+;; Byte -> Byte
+(struct not* (expr) #:transparent)
+;; Byte -> Byte -> Byte
 (struct and* (left right) #:transparent)
 (struct or* (left right) #:transparent)
+(struct le* (left right) #:transparent)
 (struct eq* (left right) #:transparent)
-(struct not* (exp) #:transparent)
+
+;; Traditional "Byte/Bitwise" Expressions
+;; Byte -> Byte -> Byte
+(struct add* (left right) #:transparent)
+(struct bwand* (left right) #:transparent)
+(struct bwor* (left right) #:transparent)
+;; Byte -> Nat -> Byte
+(struct shl* (byte bits) #:transparent)
+(struct shr* (byte bits) #:transparent)
+
+;; Input
+;; Symbol -> Byte Expression
+;; Bytes are coerced into 0x0 or 0x1 false/true, low/high values
 (struct read* (pin) #:transparent)
+
 
 ;; (define (emit-expression expression)
 ;;   (match expression
@@ -35,12 +52,23 @@
 ;;     ['false "LOW"]))
 
 ;; Setup-only statements
-(struct bool* (ident) #:transparent)
+;; Symbol -> Unit
+(struct byte* (ident) #:transparent)
+
+;; Symbol -> Symbol -> Unit
 (struct pin-mode* (pin mode) #:transparent)
 
-;; Statements
+;; Output
+;; Symbol -> Byte -> Unit
+;; Bytes are coerced into 0x0 or 0x1 false/true, low/high values
 (struct write* (pin exp) #:transparent)
+
+;; Variable
+;; Symbol -> Byte -> Unit
 (struct :=* (var exp) #:transparent)
+
+;; Conditional Execution
+;; Byte -> Unit -> Unit -> Unit
 (struct if* (cond left right) #:transparent)
 
 ;; Sequencing
@@ -86,15 +114,18 @@
 (provide arduino*
          setup*
          loop*
-         level*
-         level*?
-         level*-val
+         not*
          and*
          or*
+         le*
          eq*
-         not*
+         add*
+         bwand*
+         bwor*
+         shl*
+         shr*
          read*
-         bool*
+         byte*
          pin-mode*
          write*
          :=*
@@ -102,7 +133,7 @@
 
 ;; Example syntax
 ;; (arduino* (setup*
-;;            (list (bool* 'x)
+;;            (list (byte* 'x)
 ;;                  (pin-mode* 'd0 'input)
 ;;                  (pin-mode* 'd1 'output)
 ;;                  (:=* 'x 'true)
