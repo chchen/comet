@@ -40,12 +40,13 @@
 (define (eval-value val)
   (channel*-value val))
 
-(define (eval-send-empty? buf)
-  (eq? 0 (length (send-buf*-val buf))))
+(define (eval-send-buf-empty? buf)
+  (= (send-buf*-sent buf)
+     (length (send-buf*-vals buf))))
 
-(define (eval-recv-full? buf)
-  (eq? (recv-buf*-len buf)
-       (length (recv-buf*-val buf))))
+(define (eval-recv-buf-full? buf)
+  (= (recv-buf*-rcvd buf)
+     (length (recv-buf*-vals buf))))
 
 (define (eval-nat->send-buf len val)
   (define (nat->bool-list v pow)
@@ -54,38 +55,57 @@
         (let ([e (expt 2 pow)])
           (if (>= v e)
               (cons #t (nat->bool-list (- v e)
-                                       (- pow 1)))
+                                       (sub1 pow)))
               (cons #f (nat->bool-list v
-                                       (- pow 1)))))))
+                                       (sub1 pow)))))))
 
-  (let ([maxval (- (expt 2 len) 1)])
+  (let ([maxval (sub1 (expt 2 len))])
     (if (> val maxval)
         'send-buf-overflow
-        (send-buf* len (nat->bool-list val (- len 1))))))
+        (send-buf* 0 (nat->bool-list val (sub1 len))))))
 
-(define (eval-send-buf-head buf)
+(define (eval-send-buf-get buf)
+  (define (walk-list dist lst)
+    (if (<= dist 0)
+        (car lst)
+        (walk-list (sub1 dist) (cdr lst))))
+  
   (match buf
-    [(send-buf* len val)
-     (if (null? val)
-         'send-buf-no-head
-         (car val))]))
+    [(send-buf* sent vals)
+     (if (>= sent (length vals))
+         'send-buf-empty
+         (walk-list sent vals))]))
 
-(define (eval-send-buf-tail buf)
+(define (eval-send-buf-next buf)
   (match buf
-    [(send-buf* len val)
-     (if (null? val)
-         'send-buf-no-tail
-         (send-buf* len (cdr val)))]))
+    [(send-buf* sent vals)
+     (if (>= sent (length vals))
+         'send-buf-empty
+         (send-buf* (add1 sent) vals))]))
 
 (define (eval-empty-recv-buf len)
-  (recv-buf* len '()))
+  (define (false-list dist)
+    (if (<= dist 0)
+        '()
+        (cons #f (false-list (sub1 dist)))))
 
-(define (eval-recv-buf-insert buf item)
+  (recv-buf* 0 (false-list len)))
+
+(define (eval-recv-buf-put buf item)
+  (define (insert-list dist item lst)
+    (if (null? lst)
+        '()
+        (if (= dist 0)
+            (cons item
+                  (insert-list (sub1 dist) item (cdr lst)))
+            (cons (car lst)
+                  (insert-list (sub1 dist) item (cdr lst))))))
+  
   (match buf
-    [(recv-buf* len val)
-     (if (>= (length val) len)
+    [(recv-buf* rcvd vals)
+     (if (>= rcvd (length vals))
          'recv-buf-full
-         (recv-buf* len (cons item val)))]))
+         (recv-buf* (add1 rcvd) (insert-list rcvd item vals)))]))
 
 (define (eval-recv-buf->nat buf)
   (define (bool-list->nat l pow)
@@ -99,10 +119,10 @@
               (bool-list->nat tail (+ 1 pow))))))
 
   (match buf
-    [(recv-buf* len val)
-     (if (not (= len (length val)))
+    [(recv-buf* rcvd vals)
+     (if (< rcvd (length vals))
          'recv-buf-not-full
-         (bool-list->nat val 0))]))
+         (bool-list->nat vals 0))]))
 
 ;; Evaluate an expression. Takes an expression, context, and a state
 (define (evaluate-expr expression context state)
@@ -156,17 +176,17 @@
       [(message* e) (unary boolean? eval-message e 'message-type-err)]
       [(value* c) (unary channel-full? channel*-value c 'value-type-err)]
       ;; Buffer -> Boolean Expressions
-      [(send-empty?* b) (unary send-buf*? eval-send-empty? b 'send-empty-type-err)]
-      [(recv-full?* b) (unary recv-buf*? eval-recv-full? b 'recv-full-type-err)]
+      [(send-buf-empty?* b) (unary send-buf*? eval-send-buf-empty? b 'send-buf-empty-type-err)]
+      [(recv-buf-full?* b) (unary recv-buf*? eval-recv-buf-full? b 'recv-buf-full-type-err)]
       ;; Buffer Expressions
-      [(nat->send-buf* s v) (symmetric natural? eval-nat->send-buf s v 'nat->send-buf-type-err)]
-      [(send-buf-head* b) (unary send-buf*? eval-send-buf-head b 'send-buf-head-type-err)]
-      [(send-buf-tail* b) (unary send-buf*? eval-send-buf-tail b 'send-buf-tail-type-err)]
-      [(empty-recv-buf* s) (unary natural? eval-empty-recv-buf s 'empty-recv-buf-type-err)]
-      [(recv-buf-insert* b v) (asymmetric recv-buf*?
-                                          boolean?
-                                          eval-recv-buf-insert b v
-                                          'recv-buf-insert-type-err)]
+      [(nat->send-buf* l v) (symmetric natural? eval-nat->send-buf l v 'nat->send-buf-type-err)]
+      [(send-buf-get* b) (unary send-buf*? eval-send-buf-get b 'send-buf-get-type-err)]
+      [(send-buf-next* b) (unary send-buf*? eval-send-buf-next b 'send-buf-next-type-err)]
+      [(empty-recv-buf* l) (unary natural? eval-empty-recv-buf l 'empty-recv-buf-type-err)]
+      [(recv-buf-put* b v) (asymmetric recv-buf*?
+                                       boolean?
+                                       eval-recv-buf-put b v
+                                       'recv-buf-put-type-err)]
       [(recv-buf->nat* b) (unary recv-buf*? eval-recv-buf->nat b 'recv-buf->nat-type-err)]
       ;; Terminals
       [term
@@ -321,8 +341,7 @@
          interpret-initially
          interpret-assign)
 
-;; Test
-
+;; Tests
 (assert
  (let* ([prog
          (unity*
@@ -351,18 +370,18 @@
                                     'in
                                     'counter)
                               (case* (list (cons (list (not* 'reg)
-                                                       (send-buf-tail* 'sbuf)
-                                                       (message* (send-buf-head* 'sbuf))
-                                                       (recv-buf-insert* 'rbuf (value* 'in))
+                                                       (send-buf-next* 'sbuf)
+                                                       (message* (send-buf-get* 'sbuf))
+                                                       (recv-buf-put* 'rbuf (value* 'in))
                                                        'empty
                                                        (+* 'counter 1))
                                                  (and*
                                                   (empty?* 'out)
                                                   (and*
-                                                   (not* (send-empty?* 'sbuf))
+                                                   (not* (send-buf-empty?* 'sbuf))
                                                    (and*
                                                     (full?* 'in)
-                                                    (not* (recv-full?* 'rbuf))))))))))))]
+                                                    (not* (recv-buf-full?* 'rbuf))))))))))))]
         [env (interpret-declare prog)]
         [env2 (interpret-initially prog env)]
         [env3 (interpret-assign prog env2)])
@@ -382,7 +401,7 @@
        #:guarantee (assert
                     (let* ([word-size W]
                            [send-buffer (eval-nat->send-buf word-size N)]
-                           [send-word (send-buf*-val send-buffer)]
+                           [send-word (send-buf*-vals send-buffer)]
                            [recv-word (reverse send-word)]
                            [recv-buffer (recv-buf* word-size recv-word)]
                            [recv-nat (eval-recv-buf->nat recv-buffer)])

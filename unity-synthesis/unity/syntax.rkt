@@ -20,17 +20,21 @@
   #:transparent)
 
 ;; Send buffer type. Booleans in "big endian" order
-;; len is the original length
+;; len is the "word size"
+;; sent are the number of bits already sent
+;; buffer is exhausted when sent = (len vals)
 (struct send-buf*
-  (len
-   val)
+  (sent
+   vals)
   #:transparent)
 
 ;; Receive buffer type. Booleans in "little endian" order
-;; len is the length when full
+;; len is the "word size"
+;; recv are the number of bits received
+;; buffer is ready to "use" when recv = (len vals)
 (struct recv-buf*
-  (len
-   val)
+  (rcvd
+   vals)
   #:transparent)
 
 ;; Top-level syntax.
@@ -131,12 +135,12 @@
   #:transparent)
 
 ;; Send-buf* exhausted
-(struct send-empty?*
+(struct send-buf-empty?*
   (buf)
   #:transparent)
 
 ;; Recv-buf* ready
-(struct recv-full?*
+(struct recv-buf-full?*
   (buf)
   #:transparent)
 
@@ -151,35 +155,36 @@
   (channel)
   #:transparent)
 
-;; Construct a send buffer Nat x Nat -> Send-buf*
+;; Nat_1 -> Nat_2 -> Send-buf*
+;; Buffer represents Nat_2 in length Nat_1
 (struct nat->send-buf*
   (len
    value)
   #:transparent)
 
-;; The next (head) item in the send-buffer
+;; The next item in the send-buf*
 ;; Partial function! Only defined for non-empty send-buf*
 ;; Send-buf* -> Bool
-(struct send-buf-head*
+(struct send-buf-get*
   (buf)
   #:transparent)
 
-;; The remainder of the send-buffer
+;; New send-buf* where send-buf-get* yields the next item
 ;; Partial function! Only defined for non-empty send-buf*
 ;; Send-buf* -> Send-buf*
-(struct send-buf-tail*
+(struct send-buf-next*
   (buf)
   #:transparent)
 
-;; Construct an empty recv buffer Nat -> Recv-buf*
+;; Nat -> empty Recv-buf*
 (struct empty-recv-buf*
   (len)
   #:transparent)
 
-;; Construct a new receive buffer with an item and an existing receive buffer
+;; New recv-buf* with an item added to an existing recv-buf*
 ;; Partial function! Only defined for non-full recv-buf*
-;; Recv-buf* x Bool -> Recv-buf*
-(struct recv-buf-insert*
+;; Recv-buf* -> Bool -> Recv-buf*
+(struct recv-buf-put*
   (buf
    item)
   #:transparent)
@@ -198,12 +203,12 @@
          channel*-value
          send-buf*
          send-buf*?
-         send-buf*-len
-         send-buf*-val
+         send-buf*-sent
+         send-buf*-vals
          recv-buf*
          recv-buf*?
-         recv-buf*-len
-         recv-buf*-val
+         recv-buf*-rcvd
+         recv-buf*-vals
          unity*
          declare*
          initially*
@@ -219,15 +224,15 @@
          =*
          empty?*
          full?*
-         send-empty?*
-         recv-full?*
+         send-buf-empty?*
+         recv-buf-full?*
          message*
          value*
          nat->send-buf*
-         send-buf-head*
-         send-buf-tail*
+         send-buf-get*
+         send-buf-next*
          empty-recv-buf*
-         recv-buf-insert*
+         recv-buf-put*
          recv-buf->nat*
          )
 
