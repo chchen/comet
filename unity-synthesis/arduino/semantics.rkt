@@ -7,10 +7,6 @@
          rosette/lib/match
          rosette/lib/synthax)
 
-(define (natural? num)
-  (and (integer? num)
-       (not (negative? num))))
-
 (define (pin-type? t)
   (match t
     ['pin-in #t]
@@ -100,7 +96,7 @@
       ['HIGH true-byte]
       [v (cond
            [(eq? (get-mapping v context) 'byte) (get-mapping v state)]
-           [(natural? v) (bv v 8)]
+           [(byte*? v) v]
            [else 'bad-literal])]))
 
   (eval-helper expression))
@@ -166,7 +162,7 @@
                      (cons 'd1 'pin-out))]
       [state (list (cons 'a A)
                    (cons 'b B)
-                   (cons 'c (bv 42 8))
+                   (cons 'c (bv 1 8))
                    (cons 'd0 (bool-byte A))
                    (cons 'd1 (bool-byte B)))])
   (assert-unsat
@@ -177,12 +173,14 @@
             (evaluate-expr (or* (not* 'a) (not* 'b))
                            context
                            state))
-    (equal? (evaluate-expr 'c
+    (equal? (evaluate-expr (shr* 'c)
                            context
                            state)
-            (evaluate-expr 42
+            (bv 2 8))
+    (equal? (evaluate-expr (bv 255 8)
                            context
-                           state))
+                           state)
+            (bv 255 8))
     (byte*? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
                            context
                            state))

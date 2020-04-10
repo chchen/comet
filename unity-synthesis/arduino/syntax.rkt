@@ -21,9 +21,8 @@
 (struct add* (left right) #:transparent)
 (struct bwand* (left right) #:transparent)
 (struct bwor* (left right) #:transparent)
-;; Byte -> Nat -> Byte
-(struct shl* (byte bits) #:transparent)
-(struct shr* (byte bits) #:transparent)
+(struct shl* (byte shift-by) #:transparent)
+(struct shr* (byte shift-by) #:transparent)
 
 ;; Input
 ;; Symbol -> Byte Expression
