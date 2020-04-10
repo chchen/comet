@@ -1,109 +1,107 @@
-#lang rosette
+#lang rosette/safe
 
 (require "environment.rkt"
          "semantics.rkt"
          "syntax.rkt"
-         rosette/lib/angelic)
+         rosette/lib/angelic
+         rosette/lib/synthax)
+
+;; type:Symbol -> cxt:List -> List[id:Symbol]
+;; where (cons id type) in cxt
+(define (type-in-context typ cxt)
+  (map car
+       (filter (lambda (pair)
+                 (eq? typ
+                      (cdr pair)))
+               cxt)))
+
+(define literals
+  (list 'true
+        'false
+        (?? integer?)))
 
 ;; Inversion over expressions
+;; Nat -> Context -> Choose Tree
 (define (exp?? depth cxt)
-  (define (fill-terminals cxt stub)
-    (let ([vars (context-vars cxt)]
-          [pins (context-readable-pins cxt)])
-      (cond
-        [(and (pair? pins)
-              (pair? vars))
-         (apply choose*
-                (read* (apply choose* pins))
-                (ref* (apply choose* vars))
-                stub)]
-        [(and (pair? pins)
-              (null? vars))
-         (apply choose*
-                (read* (apply choose* pins))
-                stub)]
-        [(and (null? pins)
-              (pair? vars))
-         (apply choose*
-                (ref* (apply choose* vars))
-                stub)]
-        [else (apply choose* stub)])))
-  
-  (if (positive? depth)
-      (let ([stub (list 'true
-                        'false
-                        (not* (exp?? (- depth 1) cxt))
-                        ((choose* and*
-                                  or*
-                                  eq*
-                                  neq*)
-                         (exp?? (- depth 1) cxt)
-                         (exp?? (- depth 1) cxt)))])
-        (fill-terminals cxt stub))
-      (let ([stub (list 'true
-                        'false)])
-        (fill-terminals cxt stub))))
+  (let* ([pins (append (type-in-context 'pin-in cxt)
+                          (type-in-context 'pin-out cxt))]
+         [vars (type-in-context 'byte cxt)]
+         [terminals (append (map read* pins)
+                            vars
+                            literals)])
+    (if (positive? depth)
+        (apply choose* (append
+                        (list (not* (exp?? (sub1 depth) cxt))
+                              ((choose* shl*
+                                        shr*)
+                               (exp?? (sub1 depth) cxt)
+                               (?? integer?))
+                              ((choose* and*
+                                        or*
+                                        le*
+                                        eq*
+                                        add*
+                                        bwand*
+                                        bwor*)
+                               (exp?? (sub1 depth) cxt)
+                               (exp?? (sub1 depth) cxt)))
+                        terminals))
+        (apply choose* terminals))))
 
-;; Inversion over statements
-(define (stmt?? exp-depth stmt-depth cxt)
+;; Single, "simple" statements
+;; variable/pin declaration and
+;; variable/pin assignment
+;; Nat -> Context -> Choose Tree
+(define (simple-stmt?? exp-depth cxt)
+  (let* ([inputs (type-in-context 'pin-in cxt)]
+         [outputs (type-in-context 'pin-out cxt)]
+         [vars (type-in-context 'byte cxt)]
+         [i-terms (if (pair? inputs)
+                      (list (pin-mode* (apply choose* inputs)
+                                       'INPUT))
+                      '())]
+         [o-terms (if (pair? outputs)
+                      (list (pin-mode* (apply choose* outputs)
+                                       'OUTPUT))
+                            ;; (write* (apply choose* outputs)
+                            ;;         (exp?? exp-depth cxt)))
+                      '())]
+         [v-terms (if (pair? vars)
+                      (list (byte* (apply choose* vars)))
+                            ;; (:=* (apply choose* vars)
+                            ;;      (exp?? exp-depth cxt)))
+                      '())]
+         [null-term (list '())]
+         [choose-terms (append i-terms
+                               o-terms
+                               v-terms)])
+    (apply choose* choose-terms)))
+
+;; Sequence of unconditional statements
+;; Nat -> Nat -> Context -> Choose Tree
+(define (uncond-stmts?? stmt-depth exp-depth cxt)
   (if (positive? stmt-depth)
-      (let ([stub (stmt?? exp-depth (- stmt-depth 1) cxt)]
-            [vars (context-vars cxt)]
-            [pins (context-writable-pins cxt)])
-        (cond
-          [(and (pair? pins)
-                (pair? vars))
-           (cons (choose* (write!* (apply choose* pins)
-                                   (exp?? exp-depth cxt))
-                          (set!* (apply choose* vars)
-                                 (exp?? exp-depth cxt)))
-                 stub)]
-          [(and (pair? pins)
-                (null? vars))
-           (cons (choose* (write!* (apply choose* pins)
-                                   (exp?? exp-depth cxt)))
-                 stub)]
-          [(and (null? pins)
-                (pair? vars))
-           (cons (choose* (set!* (apply choose* vars)
-                                 (exp?? exp-depth cxt)))
-                 stub)]
-          [else '()]))
-      '()))
-
-(define (guarded-stmt?? guard-count assign-count expression-depth cxt)
-  (if (positive? guard-count)
-      (cons (if* (exp?? expression-depth cxt)
-                 (stmt?? expression-depth assign-count cxt))
-            (guarded-stmt?? (- 1 guard-count)
-                            assign-count
-                            expression-depth
+      (cons (simple-stmt?? exp-depth cxt)
+            (uncond-stmts?? (sub1 stmt-depth)
+                            exp-depth
                             cxt))
       '()))
 
-;; Inversion over declarations
-(define (decl?? depth cxt)
-  (if (positive? depth)
-      (let ([stub (decl?? (- depth 1) cxt)]
-            [vars (context-vars cxt)]
-            [pins (context-readable-pins cxt)])
-        (cond
-          [(and (pair? pins)
-                (pair? vars))
-           (cons (choose* (pin-mode* (apply choose* pins)
-                                     (choose* 'input 'output))
-                          (var* (apply choose* vars)))
-                 stub)]
-          [(and (pair? pins)
-                (null? vars))
-           (cons (pin-mode* (apply choose* pins)
-                            (choose* 'input 'output))
-                 stub)]
-          [(and (null? pins)
-                (pair? vars))
-           (cons (var* (apply choose* vars))
-                 stub)]
-          [else '()]))
+;; Sequence of conditional statements. Think of the
+;; conditional expressions on one line, with unconditional
+;; statements of length stmt-depth hung on each
+;; Nat -> Nat -> Nat -> Context -> Choose Tree
+(define (cond-stmts?? cond-depth stmt-depth exp-depth cxt)
+  (if (positive? cond-depth)
+      (cons (if* (exp?? exp-depth cxt)
+                 (uncond-stmts?? stmt-depth
+                                 exp-depth
+                                 cxt)
+                 (cond-stmts?? (sub1 cond-depth)
+                               stmt-depth
+                               exp-depth
+                               cxt))
+            '())
       '()))
 
-(provide exp?? stmt?? guarded-stmt?? decl??)
+(provide exp?? simple-stmt?? uncond-stmts?? cond-stmts??)

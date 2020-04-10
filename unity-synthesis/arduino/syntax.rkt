@@ -1,4 +1,4 @@
-#lang rosette
+#lang rosette/safe
 
 (struct arduino* (setup loop) #:transparent)
 (struct setup* (statements) #:transparent)
@@ -29,7 +29,6 @@
 ;; Symbol -> Byte Expression
 ;; Bytes are coerced into 0x0 or 0x1 false/true, low/high values
 (struct read* (pin) #:transparent)
-
 
 ;; (define (emit-expression expression)
 ;;   (match expression

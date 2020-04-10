@@ -27,9 +27,33 @@
 (define (state-put id val state)
   (add-mapping id val state))
 
+;; Extract keys from a state mapping
+(define (keys state)
+  (map car state))
+
+;; Test if states of equal given up to a list of keys
+(define (state-eq-modulo-keys? keys state-l state-r)
+  (if (null? keys)
+      #t
+      (let ([id (car keys)]
+            [tail (cdr keys)])
+        (and (eq? (state-get id state-l)
+                  (state-get id state-r))
+             (state-eq-modulo-keys? tail state-l state-r)))))
+
+;; Verification wrapper
+(define (assert-unsat expr)
+  (assert
+   (eq?
+    (verify (assert expr))
+    (unsat))))
+
 (provide equal-length?
          in-list?
          add-mapping
          get-mapping
          state-get
-         state-put)
+         state-put
+         keys
+         state-eq-modulo-keys?
+         assert-unsat)

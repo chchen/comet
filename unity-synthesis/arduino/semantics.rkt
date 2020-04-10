@@ -1,4 +1,4 @@
-#lang rosette
+#lang rosette/safe
 
 (require "environment.rkt"
          "syntax.rkt"
@@ -7,7 +7,9 @@
          rosette/lib/match
          rosette/lib/synthax)
 
-(define natural? exact-nonnegative-integer?)
+(define (natural? num)
+  (and (integer? num)
+       (not (negative? num))))
 
 (define (pin-type? t)
   (match t
@@ -67,7 +69,7 @@
     (let ([val (eval-helper expr)])
       (if (test val)
           (next val)
-          (error 'unexp "type mismatch ~a state: ~a" expr state))))
+          'bad-unexp)))
 
   (define (binexp left right test next)
     (let ([val-l (eval-helper left)]
@@ -75,7 +77,7 @@
       (if (and (test val-l)
                (test val-r))
           (next val-l val-r)
-          (error 'binexp "type mismatch ~a ~a state: ~a" left right state))))
+          'bad-binexp)))
 
   (define (eval-helper expr)
     (match expr
@@ -91,7 +93,7 @@
       [(shr* b d) (binexp b d byte*? eval-shr)]
       [(read* p) (if (pin-type? (get-mapping p context))
                      (bool-byte (get-mapping p state))
-                     (error 'read "type mismatch ~a" p))]
+                     'bad-read)]
       ['false false-byte]
       ['true true-byte]
       ['LOW false-byte]
@@ -99,52 +101,59 @@
       [v (cond
            [(eq? (get-mapping v context) 'byte) (get-mapping v state)]
            [(natural? v) (bv v 8)]
-           [else (error 'deref "type mismatch ~a" v)])]))
+           [else 'bad-literal])]))
 
   (eval-helper expression))
 
 (define (interpret-stmt statement context state)
   (match statement
-    ['() (values context state)]
-    [(cons (byte* id) tail)
-     (interpret-stmt tail
-                     (add-mapping id 'byte context)
-                     state)]
-    [(cons (pin-mode* pin 'INPUT) tail)
-     (interpret-stmt tail
-                     (add-mapping pin 'pin-in context)
-                     state)]
-    [(cons (pin-mode* pin 'OUTPUT) tail)
-     (interpret-stmt tail
-                     (add-mapping pin 'pin-out context)
-                     state)]
-    [(cons (write* pin expr) tail)
-     (let ([typ (get-mapping pin context)]
-           [val (evaluate-expr expr context state)])
-       (if (and (eq? typ 'pin-out)
-                (byte*? val))
-           (interpret-stmt tail
-                           context
-                           (add-mapping pin (bool-byte val) state))
-           (error 'write "type mismatch ~a" statement)))]
-    [(cons (:=* var expr) tail)
-     (let ([typ (get-mapping var context)]
-           [val (evaluate-expr expr context state)])
-       (if (and (eq? typ 'byte)
-                (byte*? val))
-           (interpret-stmt tail
-                           context
-                           (add-mapping var val state))
-           (error 'assign "type mismatch ~a" statement)))]
-    [(cons (if* test left right) tail)
-     (let ([tval (evaluate-expr test context state)])
-       (if (byte*? tval)
-           (let*-values ([(branch-to-take) (if (true-byte? tval) left right)]
-                         [(cxt st) (interpret-stmt branch-to-take context state)])
-             (interpret-stmt tail cxt st))
-           (error 'if "type mismatch ~a" statement)))]))
+    ['() (environment* context state)]
+    [(cons head tail)
+     (match head
+       [(byte* id)
+        (interpret-stmt tail
+                        (add-mapping id 'byte context)
+                        state)]
+       [(pin-mode* pin mode)
+        (interpret-stmt tail
+                        (add-mapping pin
+                                     (case mode
+                                       ['INPUT 'pin-in]
+                                       ['OUTPUT 'pin-out]
+                                       [else 'bad-pinmode])
+                                     context)
+                        state)]
+       [(write* pin expr)
+        (let ([typ (get-mapping pin context)]
+              [val (evaluate-expr expr context state)])
+          (if (and (eq? typ 'pin-out)
+                   (byte*? val))
+              (interpret-stmt tail
+                              context
+                              (add-mapping pin (bool-byte val) state))
+              'bad-write))]
+       [(:=* var expr)
+        (let ([typ (get-mapping var context)]
+              [val (evaluate-expr expr context state)])
+          (if (and (eq? typ 'byte)
+                   (byte*? val))
+              (interpret-stmt tail
+                              context
+                              (add-mapping var val state))
+              'bad-assign))]
+       [(if* test left right)
+        (let ([tval (evaluate-expr test context state)])
+          (if (byte*? tval)
+              (let* ([branch-to-take (if (true-byte? tval) left right)]
+                     [taken-env (interpret-stmt branch-to-take context state)]
+                     [taken-cxt (environment*-context taken-env)]
+                     [taken-st (environment*-state taken-env)])
+                (interpret-stmt tail taken-cxt taken-st))
+              'bad-if))])]))
 
-(provide evaluate-expr
+(provide true-byte?
+         false-byte?
+         evaluate-expr
          interpret-stmt)
 
 ;; Tests
@@ -160,7 +169,7 @@
                    (cons 'c (bv 42 8))
                    (cons 'd0 (bool-byte A))
                    (cons 'd1 (bool-byte B)))])
-  (assert
+  (assert-unsat
    (and
     (equal? (evaluate-expr (not* (and* 'a 'b))
                            context
@@ -175,40 +184,47 @@
                            context
                            state))
     (byte*? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
-                             context
-                             state))
+                           context
+                           state))
     (byte*? (evaluate-expr (read* 'd0)
-                            context
-                            state)))))
+                           context
+                           state)))))
 
-(let*-values ([(init-cxt init-st)
-               (interpret-stmt (list (byte* 'x)
-                                     (byte* 't)
-                                     (pin-mode* 'd0 'INPUT)
-                                     (pin-mode* 'd1 'OUTPUT)
-                                     (:=* 'x 'false)
-                                     (write* 'd1 'HIGH))
-                               '()
-                               '())]
-              [(if-cxt if-st)
-               (interpret-stmt (list (if* 't
-                                          (list (write* 'd1 'HIGH))
-                                          (list (write* 'd1 'LOW)))
-                                     (:=* 'x 'true))
-                               init-cxt
-                               (cons (cons 't A)
-                                     init-st))])
-  (assert (and (equal? (list (cons 'd1 'pin-out)
-                             (cons 'd0 'pin-in)
-                             (cons 't 'byte)
-                             (cons 'x 'byte))
-                       init-cxt)
-               (equal? (list (cons 'd1 true-byte)
-                             (cons 'x false-byte))
-                       init-st)
-               (equal? (get-mapping 'd1 if-st)
-                       A)
-               (equal? (get-mapping 'x if-st)
-                       true-byte)
-               (equal? if-cxt
-                       init-cxt))))
+(let* ([init-env
+        (interpret-stmt (list (byte* 'x)
+                              (byte* 't)
+                              (pin-mode* 'd0 'INPUT)
+                              (pin-mode* 'd1 'OUTPUT)
+                              (:=* 'x 'false)
+                              (write* 'd1 'HIGH))
+                        '()
+                        '())]
+       [init-cxt (environment*-context init-env)]
+       [init-st (environment*-state init-env)]
+       [if-env
+        (interpret-stmt (list (if* 't
+                                   (list (write* 'd1 'HIGH))
+                                   (list (write* 'd1 'LOW)))
+                              (:=* 'x 'true))
+                        init-cxt
+                        (cons (cons 't A)
+                              init-st))]
+       [if-cxt (environment*-context if-env)]
+       [if-st (environment*-state if-env)])
+  (assert-unsat
+   (and (equal? (list (cons 'd1 'pin-out)
+                      (cons 'd0 'pin-in)
+                      (cons 't 'byte)
+                      (cons 'x 'byte))
+                init-cxt)
+        (equal? (list (cons 'd1 true-byte)
+                      (cons 'x false-byte))
+                init-st)
+        (equal? (get-mapping 'd1 if-st)
+                (if (true-byte? A)
+                    true-byte
+                    false-byte))
+        (equal? (get-mapping 'x if-st)
+                true-byte)
+        (equal? if-cxt
+                init-cxt))))
