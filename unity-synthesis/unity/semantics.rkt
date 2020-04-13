@@ -6,7 +6,8 @@
          rosette/lib/match)
 
 (define (natural? n)
-  (exact-nonnegative-integer? n))
+  (and (integer? n)
+       (not (negative? n))))
 
 (define (eval-not v)
   (not v))
@@ -127,13 +128,13 @@
 ;; Evaluate an expression. Takes an expression, context, and a state
 (define (evaluate-expr expression context state)
   (define (type-check? id val)
-    (match (cxt-lookup id context)
+    (case (get-mapping id context)
       ['boolean (boolean? val)]
       ['natural (natural? val)]
       ['channel (channel*? val)]
       ['send-buf (send-buf*? val)]
       ['recv-buf (recv-buf*? val)]
-      [_ #f]))
+      [else #f]))
 
   (define (unary predicate next-func expr error-symbol)
     (let ([val (eval-helper expr)])
@@ -199,12 +200,12 @@
          [(natural? term) term]
          ;; all other symbols are variable references
          [(symbol? expr)
-          (let ([val (state-get expr state)])
+          (let ([val (get-mapping expr state)])
             (cond
               [(type-check? term val) val]
               [(null? val) 'null-reference]
               [else 'term-type-err]))]
-         [else 'syntax-error])]))
+         [else 'expression-syntax-error])]))
 
   (eval-helper expression))
 
@@ -219,8 +220,8 @@
 ;; start state is returned.
 (define (interpret-assign-stmt assignment context state)
   (define (apply-assignment l-var r-val next-func)
-    (let* ([l-type (cxt-lookup l-var context)]
-           [l-val (state-get l-var state)])
+    (let* ([l-type (get-mapping l-var context)]
+           [l-val (get-mapping l-var state)])
       (cond
         ;; propagate errors
         [(symbol? r-val) r-val]
@@ -262,11 +263,13 @@
 
   (define (filter-expressions exps-guards)
     (match exps-guards
-      [(cons (cons exps guard) tail)
-       (let ([guard-val (evaluate-expr guard context state)])
-         (if (boolean? guard-val)
-             (if guard-val exps (filter-expressions tail))
-             'guard-type-err))]
+      [(cons head tail)
+       (match head
+         [(cons exps guard)
+          (let ([guard-val (evaluate-expr guard context state)])
+            (if (boolean? guard-val)
+                (if guard-val exps (filter-expressions tail))
+                'guard-type-err))])]
       [_ '()]))
 
   (define (commit vars exps next-state)
@@ -281,26 +284,31 @@
                             val
                             (commit v-tail
                                     e-tail
-                                    (state-put var val next-state))))
-          next-state))
+                                    (add-mapping var val next-state))))
+        next-state))
 
-    (match assignment
-      [(:=* vars (case* exps-guards))
-       (let ([exps (filter-expressions exps-guards)])
-         (cond
-           ;; propagate errors
-           [(symbol? exps) exps]
-           ;; no guards satisfied
-           [(null? exps) state]
-           [else (commit vars exps state)]))]
-      [(:=* vars exps) (commit vars exps state)]))
+  (match assignment
+    [(:=* vars exps)
+     (match exps
+       [(case* exps-guards)
+        (let ([exps (filter-expressions exps-guards)])
+          (cond
+            ;; propagate errors
+            [(symbol? exps) exps]
+            ;; no guards satisfied
+            [(null? exps) state]
+            [else (commit vars exps state)]))]
+       [_ (commit vars exps state)])]
+    [_ 'assignment-syntax-error]))
 
 ;; Interpret the declaration clause. This just means taking adding the name to
 ;; type mapping and constructing a new environment
 (define (interpret-declare program)
   (match program
-    [(unity* (declare* type-declarations) _ _)
-     (environment* type-declarations '())]))
+    [(unity* declare _ _)
+     (match declare
+       [(declare* type-declarations)
+        (environment* type-declarations '())])]))
 
 (define (error-wrapper st f)
   (if (symbol? st)
@@ -311,13 +319,15 @@
 ;; and a state
 (define (interpret-initially program env)
   (match program
-    [(unity* _ (initially* initial-assignment) _)
-     (match env
-       [(environment* cxt state)
-        (error-wrapper
-         (interpret-assign-stmt initial-assignment cxt state)
-         (lambda (st)
-           (environment* cxt st)))])]))
+    [(unity* _ initially _)
+     (match initially
+       [(initially* initial-assignment)
+        (match env
+          [(environment* cxt state)
+           (error-wrapper
+            (interpret-assign-stmt initial-assignment cxt state)
+            (lambda (st)
+              (environment* cxt st)))])])]))
 
 ;; Interpret the assign clause, given an existing environment with a context and
 ;; a state
@@ -326,14 +336,17 @@
     (list-ref stmts (random (length stmts))))
 
   (match program
-    [(unity* _ _ (assign* '())) env]
-    [(unity* _ _ (assign* assign-statements))
-     (match env
-       [(environment* cxt state)
-        (error-wrapper
-         (interpret-assign-stmt (pick-stmt assign-statements) cxt state)
-         (lambda (st)
-           (environment* cxt st)))])]))
+    [(unity* _ _ assignments)
+     (match assignments
+       [(assign* assign-statements)
+        (if (null? assign-statements)
+            env
+            (match env
+              [(environment* cxt state)
+               (error-wrapper
+                (interpret-assign-stmt (pick-stmt assign-statements) cxt state)
+                (lambda (st)
+                  (environment* cxt st)))]))])]))
 
 (provide evaluate-expr
          interpret-assign-stmt

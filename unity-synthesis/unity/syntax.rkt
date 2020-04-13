@@ -1,4 +1,4 @@
-#lang rosette
+#lang rosette/safe
 
 (require "../util.rkt")
 

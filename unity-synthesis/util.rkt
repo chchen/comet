@@ -1,4 +1,6 @@
-#lang rosette
+#lang rosette/safe
+
+(require rosette/lib/match)
 
 (define (equal-length? a b)
   (and (list? a)
@@ -12,6 +14,13 @@
 ;; We use a unified state representation for our models, a associative list from
 ;; symbol to value.
 
+(define (mapping? map)
+  (if (null? map)
+      #t
+      (and (pair? map)
+           (pair? (car map))
+           (mapping? (cdr map)))))
+
 (define (get-mapping key mapping)
   (match (assoc key mapping)
     [(cons _ val) val]
@@ -20,12 +29,6 @@
 (define (add-mapping key val mapping)
   (cons (cons key val)
         mapping))
-
-(define (state-get id state)
-  (get-mapping id state))
-
-(define (state-put id val state)
-  (add-mapping id val state))
 
 ;; Extract keys from a state mapping
 (define (keys state)
@@ -50,6 +53,7 @@
 
 (provide equal-length?
          in-list?
+         mapping?
          add-mapping
          get-mapping
          state-get
