@@ -19,13 +19,15 @@
 (define (false-byte? b)
   (bveq b false-byte))
 
-;; Coerce bytes into boolean 0x0 or 0x1
-;; Non-zero bytes -> 0x1
-;; Zero bytes -> 0x0
-(define (bool-byte b)
+(define (byte->bool b)
   (if (false-byte? b)
-      false-byte
-      true-byte))
+      #f
+      #t))
+
+(define (bool->byte b)
+  (if b
+      true-byte
+      false-byte))
 
 (define (eval-not e)
   (if (false-byte? e)
@@ -88,7 +90,7 @@
       [(shl* b d) (binexp b d byte*? eval-shl)]
       [(shr* b d) (binexp b d byte*? eval-shr)]
       [(read* p) (if (pin-type? (get-mapping p context))
-                     (bool-byte (get-mapping p state))
+                     (bool->byte (get-mapping p state))
                      'bad-read)]
       ['false false-byte]
       ['true true-byte]
@@ -126,7 +128,7 @@
                    (byte*? val))
               (interpret-stmt tail
                               context
-                              (add-mapping pin (bool-byte val) state))
+                              (add-mapping pin (byte->bool val) state))
               'bad-write))]
        [(:=* var expr)
         (let ([typ (get-mapping var context)]
@@ -149,6 +151,8 @@
 
 (provide true-byte?
          false-byte?
+         byte->bool
+         bool->byte
          evaluate-expr
          interpret-stmt)
 
@@ -163,30 +167,34 @@
       [state (list (cons 'a A)
                    (cons 'b B)
                    (cons 'c (bv 1 8))
-                   (cons 'd0 (bool-byte A))
-                   (cons 'd1 (bool-byte B)))])
-  (assert-unsat
-   (and
-    (equal? (evaluate-expr (not* (and* 'a 'b))
-                           context
-                           state)
-            (evaluate-expr (or* (not* 'a) (not* 'b))
-                           context
-                           state))
-    (equal? (evaluate-expr (shr* 'c)
-                           context
-                           state)
-            (bv 2 8))
-    (equal? (evaluate-expr (bv 255 8)
-                           context
-                           state)
-            (bv 255 8))
-    (byte*? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
-                           context
-                           state))
-    (byte*? (evaluate-expr (read* 'd0)
-                           context
-                           state)))))
+                   (cons 'd0 (byte->bool A))
+                   (cons 'd1 (byte->bool B)))])
+ (assert
+  (eq?
+   (unsat)
+    (verify
+     (assert
+      (and
+       (equal? (evaluate-expr (not* (and* 'a 'b))
+                              context
+                              state)
+               (evaluate-expr (or* (not* 'a) (not* 'b))
+                              context
+                              state))
+       (equal? (evaluate-expr (shl* 'c (bv 1 8))
+                              context
+                              state)
+               (bv 2 8))
+       (equal? (evaluate-expr (bv 255 8)
+                              context
+                              state)
+               (bv 255 8))
+       (byte*? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
+                              context
+                              state))
+       (byte*? (evaluate-expr (read* 'd0)
+                              context
+                              state))))))))
 
 (let* ([init-env
         (interpret-stmt (list (byte* 'x)
@@ -209,20 +217,25 @@
                               init-st))]
        [if-cxt (environment*-context if-env)]
        [if-st (environment*-state if-env)])
-  (assert-unsat
-   (and (equal? (list (cons 'd1 'pin-out)
-                      (cons 'd0 'pin-in)
-                      (cons 't 'byte)
-                      (cons 'x 'byte))
-                init-cxt)
-        (equal? (list (cons 'd1 true-byte)
-                      (cons 'x false-byte))
-                init-st)
-        (equal? (get-mapping 'd1 if-st)
-                (if (true-byte? A)
-                    true-byte
-                    false-byte))
-        (equal? (get-mapping 'x if-st)
-                true-byte)
-        (equal? if-cxt
-                init-cxt))))
+  (assert
+   (eq?
+    (unsat)
+    (verify
+     (assert
+      (and (equal? (list (cons 'd1 'pin-out)
+                         (cons 'd0 'pin-in)
+                         (cons 't 'byte)
+                         (cons 'x 'byte))
+                   init-cxt)
+           (equal? (list (cons 'd1 #t)
+                         (cons 'x false-byte))
+                   init-st)
+           (equal? (get-mapping 'd1 if-st)
+                   (if (true-byte? A)
+                       #t
+                       #f))
+           (equal? (get-mapping 'x if-st)
+                   true-byte)
+           (equal? if-cxt
+                   init-cxt)))))))
+

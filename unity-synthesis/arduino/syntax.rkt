@@ -26,7 +26,7 @@
 
 ;; Input
 ;; Symbol -> Byte Expression
-;; Bytes are coerced into 0x0 or 0x1 false/true, low/high values
+;; Read returns 0x1 (true) or 0x0 (false)
 (struct read* (pin) #:transparent)
 
 ;; (define (emit-expression expression)
@@ -58,7 +58,7 @@
 
 ;; Output
 ;; Symbol -> Byte -> Unit
-;; Bytes are coerced into 0x0 or 0x1 false/true, low/high values
+;; Pins hold boolean values, so write coerces 0x0 -> false, true otherwise
 (struct write* (pin exp) #:transparent)
 
 ;; Variable
