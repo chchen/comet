@@ -34,30 +34,35 @@
 (define (keys state)
   (map car state))
 
-;; Test if states of equal given up to a list of keys
-(define (state-eq-modulo-keys? keys state-l state-r)
+;; Test if maps are equal given up to a list of keys
+(define (map-eq-modulo-keys? keys map-l map-r)
   (if (null? keys)
       #t
       (let ([id (car keys)]
             [tail (cdr keys)])
-        (and (eq? (state-get id state-l)
-                  (state-get id state-r))
-             (state-eq-modulo-keys? tail state-l state-r)))))
+        (and (eq? (get-mapping id map-l)
+                  (get-mapping id map-r))
+             (map-eq-modulo-keys? tail map-l map-r)))))
 
-;; Verification wrapper
-(define (assert-unsat expr)
-  (assert
-   (eq?
-    (verify (assert expr))
-    (unsat))))
+;; Test if maps are equal given up to a list of keys
+;; And if the key is defined in the reference mapping
+(define (map-eq-modulo-keys-test-reference? keys test reference)
+  (if (null? keys)
+      #t
+      (let* ([id (car keys)]
+             [tail (cdr keys)]
+             [reference-value (get-mapping id reference)]
+             [tail-eq? (map-eq-modulo-keys-test-reference? tail test reference)])
+        (if (null? reference-value)
+            tail-eq?
+            (and (eq? (get-mapping id test)
+                      reference-value)
+                 tail-eq?)))))
 
 (provide equal-length?
          in-list?
          mapping?
          add-mapping
          get-mapping
-         state-get
-         state-put
          keys
-         state-eq-modulo-keys?
-         assert-unsat)
+         map-eq-modulo-keys-test-reference?)

@@ -4,7 +4,8 @@
 
 (struct environment*
   (context
-   state))
+   state)
+  #:transparent)
 
 (provide environment*
          environment*?

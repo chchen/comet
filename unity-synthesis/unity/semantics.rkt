@@ -302,13 +302,13 @@
     [_ 'assignment-syntax-error]))
 
 ;; Interpret the declaration clause. This just means taking adding the name to
-;; type mapping and constructing a new environment
-(define (interpret-declare program)
+;; type mapping and constructing a new environment. Takes an initial state.
+(define (interpret-declare program state)
   (match program
     [(unity* declare _ _)
      (match declare
-       [(declare* type-declarations)
-        (environment* type-declarations '())])]))
+       [(declare* context)
+        (environment* context state)])]))
 
 (define (error-wrapper st f)
   (if (symbol? st)
@@ -395,7 +395,7 @@
                                                    (and*
                                                     (full?* 'in)
                                                     (not* (recv-buf-full?* 'rbuf))))))))))))]
-        [env (interpret-declare prog)]
+        [env (interpret-declare prog '())]
         [env2 (interpret-initially prog env)]
         [env3 (interpret-assign prog env2)])
    (and (environment*? env)
