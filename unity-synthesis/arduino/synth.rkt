@@ -8,23 +8,30 @@
          (prefix-in unity: "../unity/semantics.rkt")
          (prefix-in unity: "../unity/syntax.rkt")
          "inversion.rkt"
-         "symbolic.rkt"
-         rosette/lib/angelic
-         rosette/lib/synthax
-         rosette/lib/match)
+         "symbolic.rkt")
 
 ;; Synthesize Declaration
 ;; We take an Arduino context, then synthesize the statments to build it.
 (define (synth-arduino-declare cxt)
-  (let* ([sketch (uncond-stmts?? (length cxt) 0 cxt)]
-         [model (solve
+  (define (try-synth exp-depth)
+    (let* ([start-time (current-seconds)]
+           [sketch (uncond-stmts?? (length cxt) 0 cxt)]
+           [model (solve
                  (assert
                   (let ([next-env (interpret-stmt sketch '() '())])
                     (equal? (environment*-context next-env) cxt))))])
-    (if (eq? model (unsat))
-        (error 'synth-arduino-declare
-               "Synthesis failure for context ~a" cxt)
-        (evaluate sketch model))))
+    (begin
+      (display (format "try-synth expr ~a in ~a sec.~n"
+                       exp-depth (- (current-seconds) start-time))
+               (current-error-port))
+      (if (sat? model)
+          (evaluate sketch model)
+          (if (>= exp-depth max-expression-depth)
+              (error 'synth-arduino-declare
+                     "Synthesis failure for context ~a" cxt)
+              (try-synth (add1 exp-depth)))))))
+
+  (try-synth 0))
 
 (define (synth-arduino-setup unity-prog)
   (match unity-prog
@@ -32,7 +39,7 @@
       (unity:declare* unity-cxt)
       initially
       assign)
-     
+
      (let* ([s-map (unity-context->synth-map unity-cxt)]
             [arduino-cxt (synth-map-arduino-context s-map)]
             [arduino-pre-state (symbolic-state arduino-cxt)]
@@ -42,7 +49,7 @@
             [unity-post-environment (unity:interpret-initially
                                      unity-prog
                                      unity-pre-environment)])
-       
+
        (define (try-synth stmt-depth exp-depth)
          (let* ([start-time (current-seconds)]
                 [sketch (append arduino-variable-declarations
@@ -65,10 +72,10 @@
                              (unity:environment*-state
                               unity-post-environment))))))])
            (begin
-             (display (format "try-synth stmt/exp ~a/~a in ~a sec.~n"
+             (display (format "try-synth stmt/expr ~a/~a in ~a sec.~n"
                               stmt-depth exp-depth (- (current-seconds) start-time))
-                      (current-error-port))               
-             (if (not (eq? model (unsat)))
+                      (current-error-port))
+             (if (sat? model)
                  (evaluate sketch model)
                  (if (>= exp-depth max-expression-depth)
                      (if (>= stmt-depth max-statement-depth)
@@ -76,7 +83,7 @@
                                 "synthesis failure for statement ~a" initially)
                          (try-synth (add1 stmt-depth) 0))
                      (try-synth stmt-depth (add1 exp-depth)))))))
-               
+
        (try-synth 1 0))]))
 
 (define (synth-arduino-assign unity-prog)
@@ -89,7 +96,6 @@
             [arduino-cxt (synth-map-arduino-context s-map)]
             [arduino-pre-state (symbolic-state arduino-cxt)]
             [arduino-st->unity-st (synth-map-arduino-state->unity-state s-map)]
-            [arduino-variable-declarations (synth-arduino-declare arduino-cxt)]
             [unity-pre-environment (unity:environment*
                                     unity-cxt
                                     (arduino-st->unity-st arduino-pre-state))]
@@ -118,10 +124,10 @@
                              (unity:environment*-state
                               unity-post-environment))))))])
            (begin
-             (display (format "try-synth cond/stmt/exp ~a/~a/~a in ~a sec.~n"
+             (display (format "try-synth cond/stmt/expr ~a/~a/~a in ~a sec.~n"
                               cond-depth stmt-depth exp-depth (- (current-seconds) start-time))
                       (current-error-port))
-             (if (not (eq? model (unsat)))
+             (if (sat? model)
                  (evaluate sketch model)
                  (if (>= exp-depth max-expression-depth)
                      (if (>= stmt-depth max-statement-depth)

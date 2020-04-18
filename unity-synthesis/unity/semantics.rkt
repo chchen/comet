@@ -1,9 +1,13 @@
-#lang rosette
+#lang rosette/safe
 
 (require "../util.rkt"
          "environment.rkt"
          "syntax.rkt"
-         rosette/lib/match)
+         rosette/lib/match
+         ;; unsafe! only allowed for concrete evaluation
+         (only-in racket/base
+                  random
+                  symbol?))
 
 (define (natural? n)
   (and (integer? n)
@@ -405,17 +409,21 @@
 ;; Assert that send-buf and recv-buf conversions work
 ;; for all positive word sizes
 (define-symbolic W N integer?)
+
 (assert
- (eq? (unsat)
-      (verify
-       #:assume (assert (and (< 0 W)
-                             (<= 0 N)
-                             (< N (expt 2 W))))
-       #:guarantee (assert
-                    (let* ([word-size W]
-                           [send-buffer (eval-nat->send-buf word-size N)]
-                           [send-word (send-buf*-vals send-buffer)]
-                           [recv-word (reverse send-word)]
-                           [recv-buffer (recv-buf* word-size recv-word)]
-                           [recv-nat (eval-recv-buf->nat recv-buffer)])
-                      (eq? N recv-nat))))))
+ (unsat?
+  (verify
+   #:assume
+   (assert
+    (and (< 0 W)
+         (<= 0 N)
+         (< N (expt 2 W))))
+   #:guarantee
+   (assert
+    (let* ([word-size W]
+           [send-buffer (eval-nat->send-buf word-size N)]
+           [send-word (send-buf*-vals send-buffer)]
+           [recv-word (reverse send-word)]
+           [recv-buffer (recv-buf* word-size recv-word)]
+           [recv-nat (eval-recv-buf->nat recv-buffer)])
+      (eq? N recv-nat))))))

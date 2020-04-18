@@ -154,7 +154,7 @@
                                      (unity:channel* #t val-v)
                                      (unity:channel* #f null)))))
                        state-map)
-                 val-pin))]
+                 (next-pin-id val-pin)))]
       [(cons (cons id 'send-buf) tail)
        (let ([vals-id (symbol-format "~a_vals" id)]
              [sent-id (symbol-format "~a_sent" id)])

@@ -32,17 +32,15 @@
     (if (positive? depth)
         (apply choose* (append
                         (list (not* (exp?? (sub1 depth) cxt))
-                              ((choose* shl*
-                                        shr*)
-                               (exp?? (sub1 depth) cxt)
-                               (?? byte*?))
                               ((choose* and*
                                         or*
                                         le*
                                         eq*
                                         add*
                                         bwand*
-                                        bwor*)
+                                        bwor*
+                                        shl*
+                                        shr*)
                                (exp?? (sub1 depth) cxt)
                                (exp?? (sub1 depth) cxt)))
                         terminals))
@@ -103,4 +101,8 @@
             '())
       '()))
 
-(provide exp?? simple-stmt?? uncond-stmts?? cond-stmts??)
+(provide type-in-context
+         exp??
+         simple-stmt??
+         uncond-stmts??
+         cond-stmts??)

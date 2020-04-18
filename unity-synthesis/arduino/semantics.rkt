@@ -169,9 +169,8 @@
                    (cons 'c (bv 1 8))
                    (cons 'd0 (byte->bool A))
                    (cons 'd1 (byte->bool B)))])
- (assert
-  (eq?
-   (unsat)
+  (assert
+   (unsat?
     (verify
      (assert
       (and
@@ -218,8 +217,7 @@
        [if-cxt (environment*-context if-env)]
        [if-st (environment*-state if-env)])
   (assert
-   (eq?
-    (unsat)
+   (unsat?
     (verify
      (assert
       (and (equal? (list (cons 'd1 'pin-out)
