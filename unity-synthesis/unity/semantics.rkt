@@ -31,19 +31,8 @@
 (define (eval-= l r)
   (= l r))
 
-(define (channel-empty? val)
-  (and (channel*? val)
-       (not (channel*-valid val))))
-
-(define (channel-full? val)
-  (and (channel*? val)
-       (channel*-valid val)))
-
 (define (eval-message val)
   (channel* #t val))
-
-(define (eval-value val)
-  (channel*-value val))
 
 (define (eval-send-buf-empty? buf)
   (= (send-buf*-sent buf)
@@ -135,9 +124,10 @@
     (case (get-mapping id context)
       ['boolean (boolean? val)]
       ['natural (natural? val)]
-      ['channel (channel*? val)]
-      ['send-buf (send-buf*? val)]
+      ['recv-channel (channel*? val)]
+      ['send-channel (channel*? val)]
       ['recv-buf (recv-buf*? val)]
+      ['send-buf (send-buf*? val)]
       [else #f]))
 
   (define (unary predicate next-func expr error-symbol)
@@ -174,13 +164,9 @@
       ;; Nat x Nat -> Boolean Expressions
       [(<* l r) (symmetric natural? eval-< l r '<-type-err)]
       [(=* l r) (symmetric natural? eval-= l r '=-type-err)]
-      ;; Channel -> Boolean Expressions
-      [(full?* c) (unary channel*? channel*-valid c 'full-type-err)]
-      [(empty?* c) (eval-helper (not* (full?* c)))]
       ;; Channel Expressions
       [(message* e) (unary boolean? eval-message e 'message-type-err)]
-      [(value* c) (unary channel-full? channel*-value c 'value-type-err)]
-      ;; Buffer -> Boolean Expressions
+      ;; Buffer -> Boolean Predicates
       [(send-buf-empty?* b) (unary send-buf*? eval-send-buf-empty? b 'send-buf-empty-type-err)]
       [(recv-buf-full?* b) (unary recv-buf*? eval-recv-buf-full? b 'recv-buf-full-type-err)]
       ;; Buffer Expressions
@@ -193,6 +179,25 @@
                                        eval-recv-buf-put b v
                                        'recv-buf-put-type-err)]
       [(recv-buf->nat* b) (unary recv-buf*? eval-recv-buf->nat b 'recv-buf->nat-type-err)]
+      ;; Symbol |- *-Channel -> Boolean Predicates
+      [(full?* id) (let ([typ (get-mapping id context)]
+                        [val (get-mapping id state)])
+                    (if (eq? typ 'recv-channel)
+                        (channel*-valid val)
+                        'full-type-err))]
+      [(empty?* id) (let ([typ (get-mapping id context)]
+                         [val (get-mapping id state)])
+                     (if (eq? typ 'send-channel)
+                         (not (channel*-valid val))
+                         'empty-type-err))]
+      ;; Symbol |- Recv-Channel -> Boolean Deconstructor
+      [(value* id) (let ([typ (get-mapping id context)]
+                         [val (get-mapping id state)])
+                     (if (and (eq? typ 'recv-channel)
+                              (channel*? val)
+                              (channel*-valid val))
+                         (channel*-value val)
+                         'value-type-err))]
       ;; Terminals
       [term
        (cond
@@ -238,19 +243,22 @@
               (natural? r-val))
          next-func]
         ;; (undefined) channel := channel
-        [(and (eq? l-type 'channel)
+        ;; only defined for send-channel
+        [(and (eq? l-type 'send-channel)
               (null? l-val)
               (channel*? r-val))
          next-func]
-        ;; (full) channel := 'empty
-        [(and (eq? l-type 'channel)
-              (channel-full? l-val)
+        ;; (full) recv-channel := 'empty
+        [(and (eq? l-type 'recv-channel)
+              (channel*? l-val)
+              (channel*-valid l-val)
               (channel*? r-val)
               (not (channel*-valid r-val)))
          next-func]
-        ;; (empty) channel := message
-        [(and (eq? l-type 'channel)
-              (channel-empty? l-val)
+        ;; (empty) send-channel := message
+        [(and (eq? l-type 'send-channel)
+              (channel*? l-val)
+              (not (channel*-valid l-val))
               (channel*? r-val)
               (channel*-valid r-val))
          next-func]
@@ -360,25 +368,24 @@
 
 ;; Tests
 (assert
- (let* ([prog
+ (let* ([initial-state (list (cons 'in (channel* #t #t)))]
+        [prog
          (unity*
           (declare* (list (cons 'reg 'boolean)
                           (cons 'sbuf 'send-buf)
-                          (cons 'out 'channel)
+                          (cons 'out 'send-channel)
                           (cons 'rbuf 'recv-buf)
-                          (cons 'in 'channel)
+                          (cons 'in 'recv-channel)
                           (cons 'counter 'natural)))
           (initially* (:=* (list 'reg
                                  'sbuf
                                  'out
                                  'rbuf
-                                 'in
                                  'counter)
                            (list #f
                                  (nat->send-buf* 8 128)
                                  'empty
                                  (empty-recv-buf* 8)
-                                 (message* #t)
                                  0)))
           (assign* (list (:=* (list 'reg
                                     'sbuf
@@ -399,7 +406,7 @@
                                                    (and*
                                                     (full?* 'in)
                                                     (not* (recv-buf-full?* 'rbuf))))))))))))]
-        [env (interpret-declare prog '())]
+        [env (interpret-declare prog initial-state)]
         [env2 (interpret-initially prog env)]
         [env3 (interpret-assign prog env2)])
    (and (environment*? env)

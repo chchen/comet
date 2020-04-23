@@ -19,21 +19,21 @@
    value)
   #:transparent)
 
-;; Send buffer type. Booleans in "big endian" order
-;; len is the "word size"
-;; sent are the number of bits already sent
-;; buffer is exhausted when sent = (len vals)
-(struct send-buf*
-  (sent
-   vals)
-  #:transparent)
-
 ;; Receive buffer type. Booleans in "little endian" order
 ;; len is the "word size"
 ;; recv are the number of bits received
 ;; buffer is ready to "use" when recv = (len vals)
 (struct recv-buf*
   (rcvd
+   vals)
+  #:transparent)
+
+;; Send buffer type. Booleans in "big endian" order
+;; len is the "word size"
+;; sent are the number of bits already sent
+;; buffer is exhausted when sent = (len vals)
+(struct send-buf*
+  (sent
    vals)
   #:transparent)
 
@@ -155,6 +155,26 @@
   (channel)
   #:transparent)
 
+;; Nat -> empty Recv-buf*
+(struct empty-recv-buf*
+  (len)
+  #:transparent)
+
+;; New recv-buf* with an item added to an existing recv-buf*
+;; Partial function! Only defined for non-full recv-buf*
+;; Recv-buf* -> Bool -> Recv-buf*
+(struct recv-buf-put*
+  (buf
+   item)
+  #:transparent)
+
+;; The natural number equivalent of a recv-buf*
+;; Partial function! Only defined for full recv-buf*
+;; Recv-buf* -> Nat
+(struct recv-buf->nat*
+  (buf)
+  #:transparent)
+
 ;; Nat_1 -> Nat_2 -> Send-buf*
 ;; Buffer represents Nat_2 in length Nat_1
 (struct nat->send-buf*
@@ -176,39 +196,19 @@
   (buf)
   #:transparent)
 
-;; Nat -> empty Recv-buf*
-(struct empty-recv-buf*
-  (len)
-  #:transparent)
-
-;; New recv-buf* with an item added to an existing recv-buf*
-;; Partial function! Only defined for non-full recv-buf*
-;; Recv-buf* -> Bool -> Recv-buf*
-(struct recv-buf-put*
-  (buf
-   item)
-  #:transparent)
-
-;; The natural number equivalent of a recv-buf*
-;; Partial function! Only defined for full recv-buf*
-;; Recv-buf* -> Nat
-(struct recv-buf->nat*
-  (buf)
-  #:transparent)
-
 ;; Export the following from the module:
 (provide channel*
          channel*?
          channel*-valid
          channel*-value
-         send-buf*
-         send-buf*?
-         send-buf*-sent
-         send-buf*-vals
          recv-buf*
          recv-buf*?
          recv-buf*-rcvd
          recv-buf*-vals
+         send-buf*
+         send-buf*?
+         send-buf*-sent
+         send-buf*-vals
          unity*
          declare*
          initially*
@@ -224,29 +224,31 @@
          =*
          empty?*
          full?*
-         send-buf-empty?*
          recv-buf-full?*
+         send-buf-empty?*
          message*
          value*
-         nat->send-buf*
-         send-buf-get*
-         send-buf-next*
          empty-recv-buf*
          recv-buf-put*
          recv-buf->nat*
+         nat->send-buf*
+         send-buf-get*
+         send-buf-next*
          )
 
 ;; Example syntax
 
-;; (unity*
-;;  (declare* (list (cons 'reg 'boolean)
-;;                  (cons 'out 'channel)))
-;;  (initially* (:=* (list 'reg
-;;                         'out)
-;;                   (list #f
-;;                         'empty)))
-;;  (assign* (list (:=* (list 'reg
-;;                            'out)
-;;                      (case* (list (cons (list (not* 'reg)
-;;                                               (message* 'reg))
-;;                                         (empty?* 'out))))))))
+(assert
+ (unity*?
+  (unity*
+   (declare* (list (cons 'reg 'boolean)
+                   (cons 'out 'send-channel)))
+   (initially* (:=* (list 'reg
+                          'out)
+                    (list #f
+                          'empty)))
+   (assign* (list (:=* (list 'reg
+                             'out)
+                       (case* (list (cons (list (not* 'reg)
+                                                (message* 'reg))
+                                          (empty?* 'out))))))))))
