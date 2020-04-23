@@ -106,3 +106,23 @@
          simple-stmt??
          uncond-stmts??
          cond-stmts??)
+
+;; (define (sym-count u)
+;;   (length (symbolics u)))
+
+;; (let ([context (list (cons 'b 'byte)
+;;                      (cons 'i 'pin-in)
+;;                      (cons 'o 'pin-out))])
+;;   (map sym-count
+;;        (map (lambda (d) (exp?? d context))
+;;             '(0 1 2 3 4 5 6 7 8 9))))
+
+;; (let ([context (list (cons 'b 'byte)
+;;                      (cons 'i 'pin-in)
+;;                      (cons 'o 'pin-out))])
+;;   (map (lambda (e)
+;;          (map sym-count
+;;               (map (lambda (d)
+;;                      (uncond-stmts?? d e context))
+;;                    '(1 2 3 4 5 6 7 8 9))))
+;;        '(0 1 2 3 4 5)))
