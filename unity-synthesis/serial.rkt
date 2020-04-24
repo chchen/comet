@@ -8,8 +8,8 @@
 (define channel-test
   (unity*
    (declare*
-    (list (cons 'o 'channel)
-          (cons 'i 'channel)))
+    (list (cons 'o 'send-channel)
+          (cons 'i 'recv-channel)))
    (initially*
     (:=* (list 'o)
          (list 'empty)))
@@ -63,7 +63,7 @@
 (define sender
   (unity*
    (declare*
-    (list (cons 'out 'channel)
+    (list (cons 'out 'send-channel)
           (cons 'buf 'send-buf)
           (cons 'val 'natural)
           (cons 'cycle 'boolean)))
@@ -94,7 +94,7 @@
 (define receiver
   (unity*
    (declare*
-    (list (cons 'in 'channel)
+    (list (cons 'in 'recv-channel)
           (cons 'buf 'recv-buf)
           (cons 'rcvd 'boolean)
           (cons 'val 'natural)))

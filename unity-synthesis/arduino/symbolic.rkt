@@ -133,7 +133,29 @@
                              (bitvector->natural (get-mapping id st))))
                      state-map)
                current-pin)]
-      [(cons (cons id 'channel) tail)
+      [(cons (cons id 'recv-channel) tail)
+       (let* ([req-pin current-pin]
+              [ack-pin (next-pin-id req-pin)]
+              [val-pin (next-pin-id ack-pin)]
+              [req-id (symbol-format "d~a" req-pin)]
+              [ack-id (symbol-format "d~a" ack-pin)]
+              [val-id (symbol-format "d~a" val-pin)])
+         (helper tail
+                 (append (list (cons req-id 'pin-in)
+                               (cons ack-id 'pin-out)
+                               (cons val-id 'pin-in))
+                         arduino-cxt)
+                 (cons (cons id
+                             (lambda (st)
+                               (let ([req-v (get-mapping req-id st)]
+                                     [ack-v (get-mapping ack-id st)]
+                                     [val-v (get-mapping val-id st)])
+                                 (if (xor req-v ack-v)
+                                     (unity:channel* #t val-v)
+                                     (unity:channel* #f null)))))
+                       state-map)
+                 (next-pin-id val-pin)))]
+      [(cons (cons id 'send-channel) tail)
        (let* ([req-pin current-pin]
               [ack-pin (next-pin-id req-pin)]
               [val-pin (next-pin-id ack-pin)]
