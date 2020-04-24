@@ -33,7 +33,8 @@
             [arduino-st->unity-st (synth-map-arduino-state->unity-state s-map)]
             [arduino-state (symbolic-state arduino-cxt)]
             [unity-state (arduino-st->unity-st arduino-state)]
-            [unity-channels (type-in-context 'channel unity-cxt)])            
+            [unity-recv-channels (type-in-context 'recv-channel unity-cxt)]
+            [unity-send-channels (type-in-context 'send-channel unity-cxt)])
 
      (define (helper predicate channels)
        (match channels
@@ -42,7 +43,7 @@
 
           (define (try-synth exp-depth)
             (let* ([start-time (current-seconds)]
-                   [sketch (exp?? exp-depth arduino-cxt)]
+                   [sketch (exp?? exp-depth arduino-cxt '())]
                    [unity-expr (apply predicate (list channel-id))]
                    [arduino-val (evaluate-expr sketch arduino-cxt arduino-state)]
                    [unity-val (unity:evaluate-expr unity-expr unity-cxt unity-state)]
@@ -71,7 +72,7 @@
           (cons (try-synth 0)
                 (helper predicate tail))]))
 
-     (append (helper unity:full?* unity-channels)
-             (helper unity:empty?* unity-channels)))]))
+     (append (helper unity:full?* unity-recv-channels)
+             (helper unity:empty?* unity-send-channels)))]))
 
 (provide channel-predicates)

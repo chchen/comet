@@ -42,8 +42,8 @@
          (list #f
                (nat->send-buf* 8 1))))
    (assign*
-    (:=* (list 'x)
-         (list (send-buf-get* 's))))))
+    (list (:=* (list 'x)
+               (list (send-buf-get* 's)))))))
 
 (define buf-test
   (unity*

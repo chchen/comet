@@ -15,7 +15,7 @@
 (define (synth-arduino-declare cxt)
   (define (try-synth exp-depth)
     (let* ([start-time (current-seconds)]
-           [sketch (uncond-stmts?? (length cxt) 0 cxt)]
+           [sketch (uncond-stmts?? (length cxt) 0 cxt '())]
            [model (solve
                  (assert
                   (let ([next-env (interpret-stmt sketch '() '())])
@@ -53,7 +53,7 @@
        (define (try-synth stmt-depth exp-depth)
          (let* ([start-time (current-seconds)]
                 [sketch (append arduino-variable-declarations
-                                (uncond-stmts?? stmt-depth exp-depth arduino-cxt))]
+                                (uncond-stmts?? stmt-depth exp-depth arduino-cxt '()))]
                 [model (synthesize
                         #:forall
                         arduino-pre-state
@@ -77,12 +77,12 @@
                       (current-error-port))
              (if (sat? model)
                  (evaluate sketch model)
-                 (if (>= exp-depth max-expression-depth)
-                     (if (>= stmt-depth max-statement-depth)
+                 (if (>= stmt-depth max-statement-depth)
+                     (if (>= exp-depth max-expression-depth)
                          (error 'synth-arduino-setup
                                 "synthesis failure for statement ~a" initially)
-                         (try-synth (add1 stmt-depth) 0))
-                     (try-synth stmt-depth (add1 exp-depth)))))))
+                         (try-synth (1 (add1 exp-depth))))
+                     (try-synth (add1 stmt-depth) exp-depth))))))
 
        (try-synth 1 0))]))
 
@@ -105,7 +105,7 @@
 
        (define (try-synth cond-depth stmt-depth exp-depth)
          (let* ([start-time (current-seconds)]
-                [sketch (cond-stmts?? cond-depth stmt-depth exp-depth arduino-cxt)]
+                [sketch (cond-stmts?? cond-depth stmt-depth exp-depth arduino-cxt '())]
                 [model (synthesize
                         #:forall
                         arduino-pre-state
@@ -129,14 +129,14 @@
                       (current-error-port))
              (if (sat? model)
                  (evaluate sketch model)
-                 (if (>= exp-depth max-expression-depth)
-                     (if (>= stmt-depth max-statement-depth)
-                         (if (>= cond-depth max-statement-depth)
+                 (if (>= stmt-depth max-statement-depth)
+                     (if (>= cond-depth max-condition-depth)
+                         (if (>= exp-depth max-expression-depth)
                              (error 'synth-arduino-assign
                                     "Synthesis failure for statement ~a" assign)
-                             (try-synth (add1 cond-depth) 1 0))
-                         (try-synth cond-depth (add1 stmt-depth) 0))
-                     (try-synth cond-depth stmt-depth (add1 exp-depth)))))))
+                             (try-synth 1 1 (add1 exp-depth)))
+                         (try-synth (add1 cond-depth) 1 exp-depth))
+                     (try-synth cond-depth (add1 stmt-depth) exp-depth))))))
 
        (try-synth 1 1 0))]))
 

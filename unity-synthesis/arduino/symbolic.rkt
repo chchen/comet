@@ -20,6 +20,9 @@
 (define max-statement-depth
   5)
 
+(define max-condition-depth
+  4)
+
 (define max-pin-id
   21)
 
@@ -212,6 +215,7 @@
 
 (provide max-expression-depth
          max-statement-depth
+         max-condition-depth
          max-pin-id
          symbolic-state
          synth-map

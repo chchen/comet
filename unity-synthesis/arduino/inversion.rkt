@@ -22,16 +22,17 @@
 
 ;; Inversion over expressions
 ;; Nat -> Context -> Choose Tree
-(define (exp?? depth cxt)
+(define (exp?? depth cxt extra-exps)
   (let* ([pins (append (type-in-context 'pin-in cxt)
                        (type-in-context 'pin-out cxt))]
          [vars (type-in-context 'byte cxt)]
          [terminals (append (map read* pins)
                             vars
-                            literals)])
+                            literals
+                            extra-exps)])
     (if (positive? depth)
         (apply choose* (append
-                        (list (not* (exp?? (sub1 depth) cxt))
+                        (list (not* (exp?? (sub1 depth) cxt extra-exps))
                               ((choose* and*
                                         or*
                                         le*
@@ -41,8 +42,8 @@
                                         bwor*
                                         shl*
                                         shr*)
-                               (exp?? (sub1 depth) cxt)
-                               (exp?? (sub1 depth) cxt)))
+                               (exp?? (sub1 depth) cxt extra-exps)
+                               (exp?? (sub1 depth) cxt extra-exps)))
                         terminals))
         (apply choose* terminals))))
 
@@ -50,7 +51,7 @@
 ;; variable/pin declaration and
 ;; variable/pin assignment
 ;; Nat -> Context -> Choose Tree
-(define (simple-stmt?? exp-depth cxt)
+(define (simple-stmt?? exp-depth cxt extra-exps)
   (let* ([inputs (type-in-context 'pin-in cxt)]
          [outputs (type-in-context 'pin-out cxt)]
          [vars (type-in-context 'byte cxt)]
@@ -62,12 +63,12 @@
                       (list (pin-mode* (apply choose* outputs)
                                        'OUTPUT)
                             (write* (apply choose* outputs)
-                                    (exp?? exp-depth cxt)))
+                                    (exp?? exp-depth cxt extra-exps)))
                       '())]
          [v-terms (if (pair? vars)
                       (list (byte* (apply choose* vars))
                             (:=* (apply choose* vars)
-                                 (exp?? exp-depth cxt)))
+                                 (exp?? exp-depth cxt extra-exps)))
                       '())]
          [choose-terms (append i-terms
                                o-terms
@@ -76,28 +77,31 @@
 
 ;; Sequence of unconditional statements
 ;; Nat -> Nat -> Context -> Choose Tree
-(define (uncond-stmts?? stmt-depth exp-depth cxt)
+(define (uncond-stmts?? stmt-depth exp-depth cxt extra-exps)
   (if (positive? stmt-depth)
-      (cons (simple-stmt?? exp-depth cxt)
+      (cons (simple-stmt?? exp-depth cxt extra-exps)
             (uncond-stmts?? (sub1 stmt-depth)
                             exp-depth
-                            cxt))
+                            cxt
+                            extra-exps))
       '()))
 
 ;; Sequence of conditional statements. Think of the
 ;; conditional expressions on one line, with unconditional
 ;; statements of length stmt-depth hung on each
 ;; Nat -> Nat -> Nat -> Context -> Choose Tree
-(define (cond-stmts?? cond-depth stmt-depth exp-depth cxt)
+(define (cond-stmts?? cond-depth stmt-depth exp-depth cxt extra-exps)
   (if (positive? cond-depth)
-      (cons (if* (exp?? exp-depth cxt)
+      (cons (if* (exp?? exp-depth cxt extra-exps)
                  (uncond-stmts?? stmt-depth
                                  exp-depth
-                                 cxt)
+                                 cxt
+                                 extra-exps)
                  (cond-stmts?? (sub1 cond-depth)
                                stmt-depth
                                exp-depth
-                               cxt))
+                               cxt
+                               extra-exps))
             '())
       '()))
 
@@ -114,7 +118,7 @@
 ;;                      (cons 'i 'pin-in)
 ;;                      (cons 'o 'pin-out))])
 ;;   (map sym-count
-;;        (map (lambda (d) (exp?? d context))
+;;        (map (lambda (d) (exp?? d context '()))
 ;;             '(0 1 2 3 4 5 6 7 8 9))))
 
 ;; (let ([context (list (cons 'b 'byte)
@@ -123,6 +127,6 @@
 ;;   (map (lambda (e)
 ;;          (map sym-count
 ;;               (map (lambda (d)
-;;                      (uncond-stmts?? d e context))
+;;                      (uncond-stmts?? d e context '()))
 ;;                    '(1 2 3 4 5 6 7 8 9))))
 ;;        '(0 1 2 3 4 5)))

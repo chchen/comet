@@ -46,7 +46,7 @@
 
           (define (try-synth exp-depth)
             (let* ([start-time (current-seconds)]
-                   [sketch (exp?? exp-depth arduino-cxt)]
+                   [sketch (exp?? exp-depth arduino-cxt '())]
                    [unity-expr (apply predicate (list buffer-id))]
                    [arduino-val (evaluate-expr sketch arduino-cxt arduino-state)]
                    [unity-val (unity:evaluate-expr unity-expr unity-cxt unity-state)]
