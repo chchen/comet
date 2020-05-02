@@ -44,7 +44,10 @@
       r
       l))
 
-(define eval-le bvult)
+(define (eval-le l r)
+  (if (bvult l r)
+      true-byte
+      false-byte))
 
 (define (eval-eq l r)
   (if (bveq l r)
@@ -63,43 +66,35 @@
 
 ;; Evaluate
 (define (evaluate-expr expression context state)
-  (define (unexp expr test next)
+  (define (unexp next expr)
     (let ([val (eval-helper expr)])
-      (if (test val)
-          (next val)
-          'bad-unexp)))
+      (next val)))
 
-  (define (binexp left right test next)
+  (define (binexp next left right)
     (let ([val-l (eval-helper left)]
           [val-r (eval-helper right)])
-      (if (and (test val-l)
-               (test val-r))
-          (next val-l val-r)
-          'bad-binexp)))
+      (next val-l val-r)))
 
   (define (eval-helper expr)
     (match expr
-      [(not* e) (unexp e byte*? eval-not)]
-      [(and* l r) (binexp l r byte*? eval-and)]
-      [(or* l r) (binexp l r byte*? eval-or)]
-      [(le* l r) (binexp l r byte*? eval-le)]
-      [(eq* l r) (binexp l r byte*? eval-eq)]
-      [(add* l r) (binexp l r byte*? eval-add)]
-      [(bwand* l r) (binexp l r byte*? eval-bwand)]
-      [(bwor* l r) (binexp l r byte*? eval-bwor)]
-      [(shl* b d) (binexp b d byte*? eval-shl)]
-      [(shr* b d) (binexp b d byte*? eval-shr)]
-      [(read* p) (if (pin-type? (get-mapping p context))
-                     (bool->byte (get-mapping p state))
-                     'bad-read)]
+      [(not* e) (unexp eval-not e)]
+      [(and* l r) (binexp eval-and l r)]
+      [(or* l r) (binexp eval-or l r)]
+      [(le* l r) (binexp eval-le l r)]
+      [(eq* l r) (binexp eval-eq l r)]
+      [(add* l r) (binexp eval-add l r)]
+      [(bwand* l r) (binexp eval-bwand l r)]
+      [(bwor* l r) (binexp eval-bwor l r)]
+      [(shl* l r) (binexp eval-shl l r)]
+      [(shr* l r) (binexp eval-shr l r)]
+      [(read* p) (bool->byte (get-mapping p state))]
       ['false false-byte]
       ['true true-byte]
       ['LOW false-byte]
       ['HIGH true-byte]
-      [v (cond
-           [(eq? (get-mapping v context) 'byte) (get-mapping v state)]
-           [(byte*? v) v]
-           [else 'bad-literal])]))
+      [v (if (byte*? v)
+             v
+             (get-mapping v state))]))
 
   (eval-helper expression))
 
