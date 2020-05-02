@@ -21,7 +21,7 @@
   5)
 
 (define max-condition-depth
-  4)
+  2)
 
 (define max-pin-id
   21)
@@ -51,7 +51,7 @@
   (define (symbolic-boolean)
     (define-symbolic* b boolean?)
     b)
-  
+
   (define (symbolic-byte)
     (define-symbolic* b (bitvector 8))
     b)
@@ -213,6 +213,48 @@
 
   (helper unity-context '() '() 0))
 
+;; Ensure monotonic transition for a value
+;; For each symbol, ensure that
+;; 1) post states are consistent
+;; 2) pre states are consistent
+;; And for each intermediate state back to the pre state
+;; that it corresponds to the post state
+;; and if it corresponds to the pre state
+;; it continues to correspond to the pre state
+(define (monotonic-transition-equiv? syms arduino-pre arduino-post unity-pre unity-post mapping)
+  (if (null? syms)
+      #t
+      (let* ([sym (car syms)]
+             [mapped-post-val (get-mapping sym (mapping arduino-post))]
+             [unity-pre-val (get-mapping sym unity-pre)]
+             [unity-post-val (get-mapping sym unity-post)])
+
+        (define (transition-ok? test-state pre-phase?)
+          (let* ([mapped-test-val (get-mapping sym (mapping test-state))]
+                 [pre-eq? (eq? mapped-test-val unity-pre-val)]
+                 [post-eq? (eq? mapped-test-val unity-post-val)])
+            (if (eq? test-state arduino-pre)
+                ;; We are in the initial state
+                #t
+                ;; We are in an intermediate state
+                (and (if pre-phase?
+                         ;; we're locked into matching against pre-state
+                         pre-eq?
+                         ;; we can match either pre or post state
+                         (or pre-eq?
+                             post-eq?))
+                     (transition-ok? (cdr test-state)
+                                     pre-eq?)))))
+
+        (and (eq? mapped-post-val unity-post-val)
+             (transition-ok? arduino-post #f)
+             (monotonic-transition-equiv? (cdr syms)
+                                          arduino-pre
+                                          arduino-post
+                                          unity-pre
+                                          unity-post
+                                          mapping)))))
+
 (provide max-expression-depth
          max-statement-depth
          max-condition-depth
@@ -221,4 +263,43 @@
          synth-map
          synth-map-arduino-context
          synth-map-arduino-state->unity-state
-         unity-context->synth-map)
+         unity-context->synth-map
+         monotonic-transition-equiv?)
+
+;; (let* ([unity-cxt (list (cons 'o 'send-channel)
+;;                         (cons 'n 'natural))]
+;;        [unity-internals (list (cons 'n 'natural))]
+;;        [unity-externals (list (cons 'i 'recv-channel)
+;;                               (cons 'o 'send-channel))]
+;;        [synth-map (unity-context->synth-map unity-cxt)]
+;;        [arduino-cxt (synth-map-arduino-context synth-map)]
+;;        [mapping (synth-map-arduino-state->unity-state synth-map)]
+;;        [arduino-sym (symbolic-state arduino-cxt)]
+;;        [o-req (get-mapping 'd0 arduino-sym)]
+;;        [o-ack (get-mapping 'd1 arduino-sym)]
+;;        [arduino-pre (cons (cons 'd0 o-ack)
+;;                           arduino-sym)]
+;;        [unity-pre (mapping arduino-pre)]
+;;        [unity-post (cons (cons 'o (unity:channel* #t #t)) unity-pre)]
+;;        [arduino-bad-post (cons (cons 'd2 #t)
+;;                                (cons (cons 'd0 (not o-ack))
+;;                                      arduino-pre))]
+;;        [arduino-good-post (cons (cons 'd0 (not o-ack))
+;;                                 (cons (cons 'd2 #t)
+;;                                       arduino-pre))])
+;;   (list
+;;    (map-eq-modulo-keys-test-reference? unity-internals
+;;                                        unity-pre
+;;                                        unity-post)
+;;    (monotonic-transition-equiv? '(o)
+;;                                 arduino-pre
+;;                                 arduino-bad-post
+;;                                 unity-pre
+;;                                 unity-post
+;;                                 mapping)
+;;    (monotonic-transition-equiv? '(o)
+;;                                 arduino-pre
+;;                                 arduino-good-post
+;;                                 unity-pre
+;;                                 unity-post
+;;                                 mapping)))
