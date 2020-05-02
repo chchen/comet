@@ -9,6 +9,34 @@
                   random
                   symbol?))
 
+(define (external? typ)
+  (case typ
+    ['boolean #f]
+    ['natural #f]
+    ['recv-channel #t]
+    ['send-channel #t]
+    ['recv-buf #f]
+    ['send-buf #f]))
+
+(define (internal? typ)
+  (case typ
+    ['boolean #t]
+    ['natural #t]
+    ['recv-channel #f]
+    ['send-channel #f]
+    ['recv-buf #t]
+    ['send-buf #t]))
+
+(define (context->external-vars cxt)
+  (keys (filter (lambda (pair)
+                  (external? (cdr pair)))
+                cxt)))
+
+(define (context->internal-vars cxt)
+  (keys (filter (lambda (pair)
+                  (internal? (cdr pair)))
+                cxt)))
+
 (define (natural? n)
   (and (integer? n)
        (not (negative? n))))
@@ -242,12 +270,6 @@
         [(and (eq? l-type 'natural)
               (natural? r-val))
          next-func]
-        ;; (undefined) channel := channel
-        ;; only defined for send-channel
-        [(and (eq? l-type 'send-channel)
-              (null? l-val)
-              (channel*? r-val))
-         next-func]
         ;; (full) recv-channel := 'empty
         [(and (eq? l-type 'recv-channel)
               (channel*? l-val)
@@ -300,6 +322,7 @@
         next-state))
 
   (match assignment
+    ['() state]
     [(:=* vars exps)
      (match exps
        [(case* exps-guards)
@@ -360,7 +383,9 @@
                 (lambda (st)
                   (environment* cxt st)))]))])]))
 
-(provide evaluate-expr
+(provide context->external-vars
+         context->internal-vars
+         evaluate-expr
          interpret-assign-stmt
          interpret-declare
          interpret-initially
@@ -368,7 +393,8 @@
 
 ;; Tests
 (assert
- (let* ([initial-state (list (cons 'in (channel* #t #t)))]
+ (let* ([initial-state (list (cons 'out (channel* #f null))
+                             (cons 'in (channel* #t #t)))]
         [prog
          (unity*
           (declare* (list (cons 'reg 'boolean)
@@ -379,12 +405,10 @@
                           (cons 'counter 'natural)))
           (initially* (:=* (list 'reg
                                  'sbuf
-                                 'out
                                  'rbuf
                                  'counter)
                            (list #f
                                  (nat->send-buf* 8 128)
-                                 'empty
                                  (empty-recv-buf* 8)
                                  0)))
           (assign* (list (:=* (list 'reg
