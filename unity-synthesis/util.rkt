@@ -44,25 +44,10 @@
                   (get-mapping id map-r))
              (map-eq-modulo-keys? tail map-l map-r)))))
 
-;; Test if maps are equal given up to a list of keys
-;; And if the key is defined in the reference mapping
-(define (map-eq-modulo-keys-test-reference? keys test reference)
-  (if (null? keys)
-      #t
-      (let* ([id (car keys)]
-             [tail (cdr keys)]
-             [reference-value (get-mapping id reference)]
-             [tail-eq? (map-eq-modulo-keys-test-reference? tail test reference)])
-        (if (null? reference-value)
-            tail-eq?
-            (and (eq? (get-mapping id test)
-                      reference-value)
-                 tail-eq?)))))
-
 (provide equal-length?
          in-list?
          mapping?
          add-mapping
          get-mapping
          keys
-         map-eq-modulo-keys-test-reference?)
+         map-eq-modulo-keys?)
