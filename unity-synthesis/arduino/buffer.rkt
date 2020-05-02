@@ -62,8 +62,6 @@
                              (byte->bool arduino-val)
                              unity-val)))])
               (begin
-                (display unity-expr
-                         (current-error-port))
                 (display (format "try-synth expr ~a in ~a sec.~n"
                                  exp-depth (- (current-seconds) start-time))
                          (current-error-port))
