@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "../util.rkt")
+(require "../util.rkt"
+         rosette/lib/match)
 
 ;; Types
 ;; Boolean (true/false)
@@ -241,14 +242,32 @@
 (assert
  (unity*?
   (unity*
-   (declare* (list (cons 'reg 'boolean)
+   (declare* (list (cons 'reg 'natural)
+                   (cons 'in-read 'boolean)
+                   (cons 'in 'recv-channel)
                    (cons 'out 'send-channel)))
    (initially* (:=* (list 'reg
-                          'out)
-                    (list #f
-                          'empty)))
-   (assign* (list (:=* (list 'reg
-                             'out)
-                       (case* (list (cons (list (not* 'reg)
-                                                (message* 'reg))
-                                          (empty?* 'out))))))))))
+                          'in-read)
+                    (list 42
+                          #f)))
+   (assign* (list
+             ;; non-deterministic choice #1
+             (list
+              ;; parallel assignment #1a
+              (:=* (list 'in-read
+                         'out)
+                   (case* (list (cons (list #t
+                                            (message* (value* 'recv-channel)))
+                                      (and* (not 'in-read)
+                                            (and* (empty?* 'out)
+                                                  (full?* 'in)))))))
+              ;; parallel assignment #1b
+              (:=* (list 'in-read
+                         'in)
+                   (case* (list (cons (list #f
+                                            'empty)
+                                      (and* 'in-read
+                                            (full?* 'in)))))))
+             ;; non-deterministic choice #2
+             (list (:=* (list 'reg)
+                        (list (+* 'reg 1)))))))))

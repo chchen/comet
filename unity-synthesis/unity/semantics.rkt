@@ -91,7 +91,7 @@
     (if (<= dist 0)
         (car lst)
         (walk-list (sub1 dist) (cdr lst))))
-  
+
   (match buf
     [(send-buf* sent vals)
      (if (>= sent (length vals))
@@ -122,7 +122,7 @@
                   (insert-list (sub1 dist) item (cdr lst)))
             (cons (car lst)
                   (insert-list (sub1 dist) item (cdr lst))))))
-  
+
   (match buf
     [(recv-buf* rcvd vals)
      (if (>= rcvd (length vals))
@@ -255,7 +255,11 @@
 ;; For conditional (case*) assignments, we apply the expression values if the
 ;; boolean expression guard is satisified. If no guards are satisified, then the
 ;; start state is returned.
-(define (interpret-assign-stmt assignment context state)
+(define (interpret-assign-stmts assignments context state)
+  (struct assign-triple
+    (vars exps condition)
+    #:transparent)
+
   (define (apply-assignment l-var r-val next-func)
     (let* ([l-type (get-mapping l-var context)]
            [l-val (get-mapping l-var state)])
@@ -295,46 +299,57 @@
         ;; fall-through
         [else 'assignment-type-err])))
 
-  (define (filter-expressions exps-guards)
-    (match exps-guards
+  (define (expand-cases vars cases)
+    (map (lambda (c)
+           (let ([exps (car c)]
+                 [guard (cdr c)])
+             (assign-triple vars exps guard)))
+         cases))
+
+  (define (regularize-assign assign)
+    (match assign
+      [(:=* vars exps)
+       (match exps
+         [(case* cases)
+          (expand-cases vars cases)]
+         [_ (assign-triple vars exps #t)])]))
+
+  (define (filter-enabled-assigns to-check enabled-assigns)
+    (match to-check
+      ['() enabled-assigns]
       [(cons head tail)
        (match head
-         [(cons exps guard)
+         [(assign-triple vars exps guard)
           (let ([guard-val (evaluate-expr guard context state)])
             (if (boolean? guard-val)
-                (if guard-val exps (filter-expressions tail))
-                'guard-type-err))])]
-      [_ '()]))
+                (if guard-val
+                    (filter-enabled-assigns tail (cons head enabled-assigns))
+                    (filter-enabled-assigns tail enabled-assigns))
+                'guard-type-err))])]))
 
-  (define (commit vars exps next-state)
-    (if (and (pair? vars)
-             (pair? exps))
-        (let* ([var (car vars)]
-               [expr (car exps)]
-               [val (evaluate-expr expr context state)]
-               [v-tail (cdr vars)]
-               [e-tail (cdr exps)])
-          (apply-assignment var
-                            val
-                            (commit v-tail
-                                    e-tail
-                                    (add-mapping var val next-state))))
-        next-state))
+  (define (vars-exps-to-commit assign-triples)
+    (map cons
+         (flatten (map assign-triple-vars assign-triples))
+         (flatten (map assign-triple-exps assign-triples))))
 
-  (match assignment
-    ['() state]
-    [(:=* vars exps)
-     (match exps
-       [(case* exps-guards)
-        (let ([exps (filter-expressions exps-guards)])
-          (cond
-            ;; propagate errors
-            [(symbol? exps) exps]
-            ;; no guards satisfied
-            [(null? exps) state]
-            [else (commit vars exps state)]))]
-       [_ (commit vars exps state)])]
-    [_ 'assignment-syntax-error]))
+  (define (commit var-exp next-state)
+    (let* ([var (car var-exp)]
+           [expr (cdr var-exp)]
+           [val (evaluate-expr expr context state)])
+      (apply-assignment var
+                        val
+                        (add-mapping var val next-state))))
+
+  (let* ([regularized-assigns (flatten (map regularize-assign assignments))]
+         [enabled-assigns (filter-enabled-assigns regularized-assigns '())])
+    (cond
+      ;; propagate error symbols
+      [(symbol? enabled-assigns) enabled-assigns]
+      ;; nothing enabled?
+      [(null? enabled-assigns) state]
+      ;; commit the enabled triples
+      [else (let ([to-commit (vars-exps-to-commit enabled-assigns)])
+              (foldl commit state to-commit))])))
 
 ;; Interpret the declaration clause. This just means taking adding the name to
 ;; type mapping and constructing a new environment. Takes an initial state.
@@ -360,14 +375,14 @@
         (match env
           [(environment* cxt state)
            (error-wrapper
-            (interpret-assign-stmt initial-assignment cxt state)
+            (interpret-assign-stmts initial-assignment cxt state)
             (lambda (st)
               (environment* cxt st)))])])]))
 
 ;; Interpret the assign clause, given an existing environment with a context and
 ;; a state
 (define (interpret-assign program env)
-  (define (pick-stmt stmts)
+  (define (pick-stmts stmts)
     (list-ref stmts (random (length stmts))))
 
   (match program
@@ -379,14 +394,13 @@
             (match env
               [(environment* cxt state)
                (error-wrapper
-                (interpret-assign-stmt (pick-stmt assign-statements) cxt state)
+                (interpret-assign-stmts (pick-stmts assign-statements) cxt state)
                 (lambda (st)
                   (environment* cxt st)))]))])]))
 
 (provide context->external-vars
          context->internal-vars
          evaluate-expr
-         interpret-assign-stmt
          interpret-declare
          interpret-initially
          interpret-assign)
@@ -397,39 +411,39 @@
                              (cons 'in (channel* #t #t)))]
         [prog
          (unity*
-          (declare* (list (cons 'reg 'boolean)
-                          (cons 'sbuf 'send-buf)
-                          (cons 'out 'send-channel)
-                          (cons 'rbuf 'recv-buf)
-                          (cons 'in 'recv-channel)
-                          (cons 'counter 'natural)))
-          (initially* (:=* (list 'reg
-                                 'sbuf
-                                 'rbuf
-                                 'counter)
-                           (list #f
-                                 (nat->send-buf* 8 128)
-                                 (empty-recv-buf* 8)
-                                 0)))
-          (assign* (list (:=* (list 'reg
-                                    'sbuf
-                                    'out
-                                    'rbuf
-                                    'in
-                                    'counter)
-                              (case* (list (cons (list (not* 'reg)
-                                                       (send-buf-next* 'sbuf)
-                                                       (message* (send-buf-get* 'sbuf))
-                                                       (recv-buf-put* 'rbuf (value* 'in))
-                                                       'empty
-                                                       (+* 'counter 1))
-                                                 (and*
-                                                  (empty?* 'out)
-                                                  (and*
-                                                   (not* (send-buf-empty?* 'sbuf))
-                                                   (and*
-                                                    (full?* 'in)
-                                                    (not* (recv-buf-full?* 'rbuf))))))))))))]
+          (declare*
+           (list (cons 'reg 'natural)
+                 (cons 'in-read 'boolean)
+                 (cons 'in 'recv-channel)
+                 (cons 'out 'send-channel)))
+          (initially*
+           (list
+            (:=* (list 'reg
+                       'in-read)
+                 (list 42
+                       #f))))
+          (assign*
+           (list
+            ;; non-deterministic choice #1
+            (list
+             ;; parallel assignment #1a
+             (:=* (list 'in-read
+                        'out)
+                  (case* (list (cons (list #t
+                                           (message* (value* 'recv-channel)))
+                                     (and* (not 'in-read)
+                                           (and* (empty?* 'out)
+                                                 (full?* 'in)))))))
+             ;; parallel assignment #1b
+             (:=* (list 'in-read
+                        'in)
+                  (case* (list (cons (list #f
+                                           'empty)
+                                     (and* 'in-read
+                                           (full?* 'in)))))))
+            ;; non-deterministic choice #2
+            (list (:=* (list 'reg)
+                       (list (+* 'reg 1)))))))]
         [env (interpret-declare prog initial-state)]
         [env2 (interpret-initially prog env)]
         [env3 (interpret-assign prog env2)])
