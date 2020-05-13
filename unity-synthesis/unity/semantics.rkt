@@ -81,10 +81,8 @@
               (cons #f (nat->bool-list v
                                        (sub1 pow)))))))
 
-  (let ([maxval (sub1 (expt 2 len))])
-    (if (> val maxval)
-        'send-buf-overflow
-        (send-buf* 0 (nat->bool-list val (sub1 len))))))
+  (send-buf* 0
+             (nat->bool-list val (sub1 len))))
 
 (define (eval-send-buf-get buf)
   (define (walk-list dist lst)
@@ -92,18 +90,12 @@
         (car lst)
         (walk-list (sub1 dist) (cdr lst))))
 
-  (match buf
-    [(send-buf* sent vals)
-     (if (>= sent (length vals))
-         'send-buf-empty
-         (walk-list sent vals))]))
+  (walk-list send-buf*-sent
+             send-buf*-vals))
 
 (define (eval-send-buf-next buf)
-  (match buf
-    [(send-buf* sent vals)
-     (if (>= sent (length vals))
-         'send-buf-empty
-         (send-buf* (add1 sent) vals))]))
+  (send-buf* (add1 send-buf*-sent)
+             send-buf*-vals))
 
 (define (eval-empty-recv-buf len)
   (define (false-list dist)
@@ -125,9 +117,7 @@
 
   (match buf
     [(recv-buf* rcvd vals)
-     (if (>= rcvd (length vals))
-         'recv-buf-full
-         (recv-buf* (add1 rcvd) (insert-list rcvd item vals)))]))
+     (recv-buf* (add1 rcvd) (insert-list rcvd item vals))]))
 
 (define (eval-recv-buf->nat buf)
   (define (bool-list->nat l pow)
@@ -140,11 +130,7 @@
               (+ e (bool-list->nat tail (+ 1 pow)))
               (bool-list->nat tail (+ 1 pow))))))
 
-  (match buf
-    [(recv-buf* rcvd vals)
-     (if (< rcvd (length vals))
-         'recv-buf-not-full
-         (bool-list->nat vals 0))]))
+  (bool-list->nat recv-buf*-vals 0))
 
 ;; Evaluate an expression. Takes an expression, context, and a state
 (define (evaluate-expr expression context state)
@@ -158,74 +144,47 @@
       ['send-buf (send-buf*? val)]
       [else #f]))
 
-  (define (unary predicate next-func expr error-symbol)
+  (define (unary next-func expr)
     (let ([val (eval-helper expr)])
-      (if (predicate val)
-          (next-func val)
-          error-symbol)))
+      (next-func val)))
 
-  (define (symmetric predicate next-func expr-l expr-r error-symbol)
+  (define (binary next-func expr-l expr-r)
     (let ([val-l (eval-helper expr-l)]
           [val-r (eval-helper expr-r)])
-      (if (and (predicate val-l)
-               (predicate val-r))
-          (next-func val-l val-r)
-          error-symbol)))
-
-  (define (asymmetric pred-l pred-r next-func expr-l expr-r error-symbol)
-    (let ([val-l (eval-helper expr-l)]
-          [val-r (eval-helper expr-r)])
-      (if (and (pred-l val-l)
-               (pred-r val-r))
-          (next-func val-l val-r)
-          error-symbol)))
+      (next-func val-l val-r)))
 
   (define (eval-helper expr)
     (match expr
       ;; Boolean -> Boolean Expressions
-      [(not* e) (unary boolean? eval-not e 'not-type-err)]
-      [(and* l r) (symmetric boolean? eval-and l r 'and-type-err)]
-      [(or* l r) (symmetric boolean? eval-or l r 'or-type-err)]
+      [(not* e) (unary eval-not e)]
+      [(and* l r) (binary eval-and l r)]
+      [(or* l r) (binary eval-or l r)]
       [(eq* l r) (eval-helper (or* (and* l r) (and* (not* l) (not* r))))]
       ;; Nat x Nat -> Nat Expressions
-      [(+* l r) (symmetric natural? eval-+ l r '+-type-err)]
+      [(+* l r) (binary eval-+ l r)]
       ;; Nat x Nat -> Boolean Expressions
-      [(<* l r) (symmetric natural? eval-< l r '<-type-err)]
-      [(=* l r) (symmetric natural? eval-= l r '=-type-err)]
+      [(<* l r) (binary eval-< l r)]
+      [(=* l r) (binary eval-= l r)]
       ;; Channel Expressions
-      [(message* e) (unary boolean? eval-message e 'message-type-err)]
+      [(message* e) (unary eval-message e)]
       ;; Buffer -> Boolean Predicates
-      [(send-buf-empty?* b) (unary send-buf*? eval-send-buf-empty? b 'send-buf-empty-type-err)]
-      [(recv-buf-full?* b) (unary recv-buf*? eval-recv-buf-full? b 'recv-buf-full-type-err)]
+      [(send-buf-empty?* b) (unary eval-send-buf-empty? b)]
+      [(recv-buf-full?* b) (unary eval-recv-buf-full? b)]
       ;; Buffer Expressions
-      [(nat->send-buf* l v) (symmetric natural? eval-nat->send-buf l v 'nat->send-buf-type-err)]
-      [(send-buf-get* b) (unary send-buf*? eval-send-buf-get b 'send-buf-get-type-err)]
-      [(send-buf-next* b) (unary send-buf*? eval-send-buf-next b 'send-buf-next-type-err)]
-      [(empty-recv-buf* l) (unary natural? eval-empty-recv-buf l 'empty-recv-buf-type-err)]
-      [(recv-buf-put* b v) (asymmetric recv-buf*?
-                                       boolean?
-                                       eval-recv-buf-put b v
-                                       'recv-buf-put-type-err)]
-      [(recv-buf->nat* b) (unary recv-buf*? eval-recv-buf->nat b 'recv-buf->nat-type-err)]
+      [(nat->send-buf* l v) (binary eval-nat->send-buf l v)]
+      [(send-buf-get* b) (unary eval-send-buf-get b)]
+      [(send-buf-next* b) (unary eval-send-buf-next b)]
+      [(empty-recv-buf* l) (unary eval-empty-recv-buf l)]
+      [(recv-buf-put* b v) (binary eval-recv-buf-put b v)]
+      [(recv-buf->nat* b) (unary eval-recv-buf->nat b)]
       ;; Symbol |- *-Channel -> Boolean Predicates
-      [(full?* id) (let ([typ (get-mapping id context)]
-                        [val (get-mapping id state)])
-                    (if (eq? typ 'recv-channel)
-                        (channel*-valid val)
-                        'full-type-err))]
-      [(empty?* id) (let ([typ (get-mapping id context)]
-                         [val (get-mapping id state)])
-                     (if (eq? typ 'send-channel)
-                         (not (channel*-valid val))
-                         'empty-type-err))]
+      [(full?* id) (for/all ([val (get-mapping id state)])
+                     (channel*-valid val))]
+      [(empty?* id) (for/all ([val (get-mapping id state)])
+                      (not (channel*-valid val)))]
       ;; Symbol |- Recv-Channel -> Boolean Deconstructor
-      [(value* id) (let ([typ (get-mapping id context)]
-                         [val (get-mapping id state)])
-                     (if (and (eq? typ 'recv-channel)
-                              (channel*? val)
-                              (channel*-valid val))
-                         (channel*-value val)
-                         'value-type-err))]
+      [(value* id) (for/all ([val (get-mapping id state)])
+                     (channel*-value val))]
       ;; Terminals
       [term
        (cond
@@ -236,13 +195,7 @@
          ;; natural numbers
          [(natural? term) term]
          ;; all other symbols are variable references
-         [(symbol? expr)
-          (let ([val (get-mapping expr state)])
-            (cond
-              [(type-check? term val) val]
-              [(null? val) 'null-reference]
-              [else 'term-type-err]))]
-         [else 'expression-syntax-error])]))
+         [(symbol? expr) (get-mapping expr state)])]))
 
   (eval-helper expression))
 
@@ -256,100 +209,47 @@
 ;; boolean expression guard is satisified. If no guards are satisified, then the
 ;; start state is returned.
 (define (interpret-assign-stmts assignments context state)
-  (struct assign-triple
-    (vars exps condition)
+  (struct guard-trace
+    (guard
+     trace)
     #:transparent)
 
-  (define (apply-assignment l-var r-val next-func)
-    (let* ([l-type (get-mapping l-var context)]
-           [l-val (get-mapping l-var state)])
-      (cond
-        ;; propagate errors
-        [(symbol? r-val) r-val]
-        ;; bool := bool
-        [(and (eq? l-type 'boolean)
-              (boolean? r-val))
-         next-func]
-        ;; nat := nat
-        [(and (eq? l-type 'natural)
-              (natural? r-val))
-         next-func]
-        ;; (full) recv-channel := 'empty
-        [(and (eq? l-type 'recv-channel)
-              (channel*? l-val)
-              (channel*-valid l-val)
-              (channel*? r-val)
-              (not (channel*-valid r-val)))
-         next-func]
-        ;; (empty) send-channel := message
-        [(and (eq? l-type 'send-channel)
-              (channel*? l-val)
-              (not (channel*-valid l-val))
-              (channel*? r-val)
-              (channel*-valid r-val))
-         next-func]
-        ;; send-buf := send-buf
-        [(and (eq? l-type 'send-buf)
-              (send-buf*? r-val))
-         next-func]
-        ;; recv-buf := recv-buf
-        [(and (eq? l-type 'recv-buf)
-              (recv-buf*? r-val))
-         next-func]
-        ;; fall-through
-        [else 'assignment-type-err])))
+  (define (build-trace vars exprs)
+    (map (lambda (v e)
+           (cons v
+                 (evaluate-expr e context state)))
+         vars
+         exprs))
 
   (define (expand-cases vars cases)
     (map (lambda (c)
            (let ([exps (car c)]
                  [guard (cdr c)])
-             (assign-triple vars exps guard)))
+             (guard-trace guard
+                          (build-trace vars exps))))
          cases))
 
   (define (regularize-assign assign)
     (match assign
       [(:=* vars exps)
        (match exps
-         [(case* cases)
-          (expand-cases vars cases)]
-         [_ (assign-triple vars exps #t)])]))
+         [(case* cases) (expand-cases vars cases)]
+         [_ (guard-trace #t
+                         (build-trace vars exps))])]))
 
-  (define (filter-enabled-assigns to-check enabled-assigns)
-    (match to-check
-      ['() enabled-assigns]
+  (define (apply-traces traces)
+    (match traces
+      ['() '()]
       [(cons head tail)
        (match head
-         [(assign-triple vars exps guard)
-          (let ([guard-val (evaluate-expr guard context state)])
-            (if (boolean? guard-val)
-                (if guard-val
-                    (filter-enabled-assigns tail (cons head enabled-assigns))
-                    (filter-enabled-assigns tail enabled-assigns))
-                'guard-type-err))])]))
+         [(guard-trace guard trace)
+          (if (evaluate-expr guard context state)
+              trace
+              (apply-traces tail))])]))
 
-  (define (vars-exps-to-commit assign-triples)
-    (map cons
-         (flatten (map assign-triple-vars assign-triples))
-         (flatten (map assign-triple-exps assign-triples))))
-
-  (define (commit var-exp next-state)
-    (let* ([var (car var-exp)]
-           [expr (cdr var-exp)]
-           [val (evaluate-expr expr context state)])
-      (apply-assignment var
-                        val
-                        (add-mapping var val next-state))))
-
-  (let* ([regularized-assigns (flatten (map regularize-assign assignments))]
-         [enabled-assigns (filter-enabled-assigns regularized-assigns '())])
-    (cond
-      ;; propagate error symbols
-      [(symbol? enabled-assigns) enabled-assigns]
-      ;; nothing enabled?
-      [(null? enabled-assigns) state]
-      ;; commit the enabled triples
-      [else (let ([to-commit (vars-exps-to-commit enabled-assigns)])
-              (foldl commit state to-commit))])))
+  (let* ([guard-traces (flatten (map regularize-assign assignments))]
+         [new-trace (apply-traces guard-traces)])
+    (append new-trace state)))
 
 ;; Interpret the declaration clause. This just means taking adding the name to
 ;; type mapping and constructing a new environment. Takes an initial state.
@@ -360,43 +260,37 @@
        [(declare* context)
         (environment* context state)])]))
 
-(define (error-wrapper st f)
-  (if (symbol? st)
-      st
-      (f st)))
-
 ;; Interpret the initially cause, given an existing environment with a context
 ;; and a state
 (define (interpret-initially program env)
   (match program
     [(unity* _ initially _)
      (match initially
-       [(initially* initial-assignment)
+       [(initially* assignment)
         (match env
           [(environment* cxt state)
-           (error-wrapper
-            (interpret-assign-stmts initial-assignment cxt state)
-            (lambda (st)
-              (environment* cxt st)))])])]))
+           (environment*
+            cxt
+            (interpret-assign-stmts assignment cxt state))])])]))
 
 ;; Interpret the assign clause, given an existing environment with a context and
 ;; a state
 (define (interpret-assign program env)
   (define (pick-stmts stmts)
-    (list-ref stmts (random (length stmts))))
+    (if (null? stmts)
+        '()
+        (list-ref stmts (random (length stmts)))))
 
   (match program
-    [(unity* _ _ assignments)
-     (match assignments
-       [(assign* assign-statements)
-        (if (null? assign-statements)
-            env
-            (match env
-              [(environment* cxt state)
-               (error-wrapper
-                (interpret-assign-stmts (pick-stmts assign-statements) cxt state)
-                (lambda (st)
-                  (environment* cxt st)))]))])]))
+    [(unity* _ _ assign-section)
+     (match assign-section
+       [(assign* assignments)
+        (match env
+          [(environment* cxt state)
+           (let ([chosen-assignment (pick-stmts assignments)])
+             (environment*
+              cxt
+              (interpret-assign-stmts chosen-assignment cxt state)))])])]))
 
 (provide context->external-vars
          context->internal-vars
@@ -406,44 +300,11 @@
          interpret-assign)
 
 ;; Tests
+
 (assert
  (let* ([initial-state (list (cons 'out (channel* #f null))
                              (cons 'in (channel* #t #t)))]
-        [prog
-         (unity*
-          (declare*
-           (list (cons 'reg 'natural)
-                 (cons 'in-read 'boolean)
-                 (cons 'in 'recv-channel)
-                 (cons 'out 'send-channel)))
-          (initially*
-           (list
-            (:=* (list 'reg
-                       'in-read)
-                 (list 42
-                       #f))))
-          (assign*
-           (list
-            ;; non-deterministic choice #1
-            (list
-             ;; parallel assignment #1a
-             (:=* (list 'in-read
-                        'out)
-                  (case* (list (cons (list #t
-                                           (message* (value* 'recv-channel)))
-                                     (and* (not 'in-read)
-                                           (and* (empty?* 'out)
-                                                 (full?* 'in)))))))
-             ;; parallel assignment #1b
-             (:=* (list 'in-read
-                        'in)
-                  (case* (list (cons (list #f
-                                           'empty)
-                                     (and* 'in-read
-                                           (full?* 'in)))))))
-            ;; non-deterministic choice #2
-            (list (:=* (list 'reg)
-                       (list (+* 'reg 1)))))))]
+        [prog unity-example-program]
         [env (interpret-declare prog initial-state)]
         [env2 (interpret-initially prog env)]
         [env3 (interpret-assign prog env2)])
@@ -453,6 +314,7 @@
 
 ;; Assert that send-buf and recv-buf conversions work
 ;; for all positive word sizes
+
 (define-symbolic W N integer?)
 
 (assert

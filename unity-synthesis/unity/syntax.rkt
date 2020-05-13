@@ -235,45 +235,46 @@
          nat->send-buf*
          send-buf-get*
          send-buf-next*
+         unity-example-program
          )
 
 ;; Example syntax
 
-(assert
- (unity*?
+(define unity-example-program
   (unity*
    (declare*
-    (list
-     (cons 'reg 'natural)
-     (cons 'in-read 'boolean)
-     (cons 'in 'recv-channel)
-     (cons 'out 'send-channel)))
+    (list (cons 'reg 'natural)
+          (cons 'in-read 'boolean)
+          (cons 'in 'recv-channel)
+          (cons 'out 'send-channel)))
    (initially*
     (list
      (:=* (list 'reg
                 'in-read)
           (list 42
                 #f))))
-    (assign*
+   (assign*
+    (list
+     ;; non-deterministic choice #1
      (list
-      ;; non-deterministic choice #1
-      (list
-       ;; parallel assignment #1a
-       (:=* (list 'in-read
-                  'out)
-            (case* (list (cons (list #t
-                                     (message* (value* 'recv-channel)))
-                               (and* (not 'in-read)
-                                     (and* (empty?* 'out)
-                                           (full?* 'in)))))))
-       ;; parallel assignment #1b
-       (:=* (list 'in-read
-                  'in)
-            (case* (list (cons (list #f
-                                     'empty)
-                               (and* 'in-read
-                                     (full?* 'in)))))))
-      ;; non-deterministic choice #2
-      (list
-       (:=* (list 'reg)
-            (list (+* 'reg 1)))))))))
+      ;; parallel assignment #1a
+      (:=* (list 'in-read
+                 'out)
+           (case* (list (cons (list #t
+                                    (message* (value* 'in)))
+                              (and* (not* 'in-read)
+                                    (and* (empty?* 'out)
+                                          (full?* 'in)))))))
+      ;; parallel assignment #1b
+      (:=* (list 'in-read
+                 'in)
+           (case* (list (cons (list #f
+                                    'empty)
+                              (and* 'in-read
+                                    (full?* 'in)))))))
+     ;; non-deterministic choice #2
+     (list (:=* (list 'reg)
+                (list (+* 'reg 1))))))))
+
+(assert
+ (unity*? unity-example-program))
