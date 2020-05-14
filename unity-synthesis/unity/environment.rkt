@@ -2,12 +2,16 @@
 
 (require "../util.rkt")
 
+(struct stobj (state))
+
 (struct environment*
   (context
-   state)
+   stobj)
   #:transparent)
 
-(provide environment*
+(provide stobj
+         stobj-state
+         environment*
          environment*?
          environment*-context
-         environment*-state)
+         environment*-stobj)
