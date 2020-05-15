@@ -1,28 +1,98 @@
 #lang rosette
 
-(require "unity/syntax.rkt"
-         "arduino/synth.rkt"
+(require "arduino/buffer.rkt"
          "arduino/channel.rkt"
-         "arduino/buffer.rkt"
          "arduino/inversion.rkt"
          "arduino/semantics.rkt"
          "arduino/symbolic.rkt"
-         (prefix-in arduino: "arduino/environment.rkt"))
+         "arduino/synth.rkt"
+         "unity/syntax.rkt"
+         (prefix-in arduino: "arduino/environment.rkt")
+         (prefix-in arduino: "arduino/syntax.rkt"))
+
+(define boolean-test
+  (unity*
+   (declare*
+    (list (cons 'lead 'boolean)
+          (cons 'follow 'boolean)))
+   (initially*
+    (list
+     (:=* (list 'lead
+                'follow)
+          (list #t
+                #f))))
+   (assign*
+    (list
+     (list
+      (:=* (list 'follow)
+           (case* (list (cons (list 'lead)
+                              (not* (eq* 'lead
+                                         'follow))))))
+      (:=* (list 'lead)
+           (case* (list (cons (list (not* 'lead))
+                              (eq* 'lead
+                                   'follow))))))))))
 
 (define channel-test
   (unity*
    (declare*
-    (list (cons 'o 'send-channel)
-          (cons 'i 'recv-channel)))
+    (list (cons 'in-read 'boolean)
+          (cons 'in 'recv-channel)
+          (cons 'out 'send-channel)))
    (initially*
-    '())
+    (list
+     (:=* (list 'in-read)
+          (list #f))))
    (assign*
-    (list (:=* (list 'i 'o)
-               (case*
-                (list (cons (list 'empty
-                                  (message* (value* 'i)))
-                            (and* (full?* 'i)
-                                  (empty?* 'o))))))))))
+    (list
+     ;; Each parallel assignment is independent. A parallel composition of
+     ;; simple assignments is identical to a single multi-assignment.
+     (list
+      ;; parallel assignment A. A case assignment is deterministic. That is,
+      ;; either the cases are mutually exclusive, or if two cases are enabled,
+      ;; their assignments are identical in effect. Let's choose to make them
+      ;; mutually exclusive, that is, if A contains guards g1 and g2, then (and
+      ;; g1 g2) == unsat
+      (:=* (list 'in-read
+                 'out)
+           (case* (list (cons (list #t
+                                    (message* (value* 'in)))
+                              (and* (not* 'in-read)
+                                    (and* (empty?* 'out)
+                                          (full?* 'in)))))))
+      ;; parallel assignment B
+      (:=* (list 'in-read
+                 'in)
+           (case* (list (cons (list #f
+                                    'empty)
+                              (and* 'in-read
+                                    (full?* 'in)))))))))))
+
+(define channel-sketch
+  (list
+   (arduino:if*
+    (arduino:and* (arduino:not* 'in-read)
+                  (arduino:and* (arduino:eq* (arduino:read* 'd4)
+                                             (arduino:read* 'd3))
+                                (arduino:not* (arduino:eq* (arduino:read* 'd0)
+                                                           (arduino:read* 'd1)))))
+    (list
+     (arduino::=* 'in-read
+                  'true)
+     (arduino:write* 'd5
+                     (arduino:read* 'd2))
+     (arduino:write* 'd3
+                     (arduino:not* (arduino:read* 'd4))))
+    (arduino:if*
+     (arduino:and* 'in-read
+                   (arduino:not* (arduino:eq* (arduino:read* 'd0)
+                                              (arduino:read* 'd1))))
+     (list
+      (arduino::=* 'in-read
+                   'false)
+      (arduino:write* 'd1
+                      (arduino:read* 'd0)))
+     '()))))
 
 (define recv-buf-test
   (unity*
@@ -90,79 +160,6 @@
    (assign*
     '())))
 
-;; (define (sym-count u)
-;;   (length (symbolics u)))
-
-;; (match type-test
-;;   [(unity*
-;;     (declare* unity-cxt)
-;;     initially
-;;     assign)
-;;    (let* ([mapping (unity-context->synth-map unity-cxt)]
-;;           [arduino-cxt (synth-map-arduino-context mapping)]
-;;           [state (symbolic-state arduino-cxt)]
-;;           [preds (append (channel-predicates type-test)
-;;                          (buffer-predicates type-test))])
-;;      (list
-;;       (cons 'expr
-;;             (map (lambda (d)
-;;                    (sym-count
-;;                     (exp?? d arduino-cxt '())))
-;;                  depths))
-;;       (cons 'expr-pred
-;;             (map (lambda (d)
-;;                    (sym-count
-;;                     (exp?? d arduino-cxt preds)))
-;;                  depths))
-;;       (cons 'eval-expr
-;;             (map (lambda (d)
-;;                    (sym-count
-;;                     (evaluate-expr (exp?? d arduino-cxt '())
-;;                                    arduino-cxt
-;;                                    state)))
-;;                  depths))
-;;       (cons 'eval-expr-pred
-;;             (map (lambda (d)
-;;                    (sym-count
-;;                     (evaluate-expr (exp?? d arduino-cxt preds)
-;;                                    arduino-cxt
-;;                                    state)))
-;;                  depths))))])
-
-;; (match type-test
-;;   [(unity*
-;;     (declare* unity-cxt)
-;;     initially
-;;     assign)
-;;    (let* ([mapping (unity-context->synth-map unity-cxt)]
-;;           [arduino-cxt (synth-map-arduino-context mapping)]
-;;           [preds (append (channel-predicates type-test)
-;;                          (buffer-predicates type-test))])
-;;      (map (lambda (e)
-;;             (map sym-count
-;;                  (map (lambda (d)
-;;                         (uncond-stmts?? d e arduino-cxt preds))
-;;                       '(1 2 3 4 5 6 7 8 9))))
-;;           '(0 1 2 3 4)))])
-
-;; (match type-test
-;;   [(unity*
-;;     (declare* unity-cxt)
-;;     initially
-;;     assign)
-;;    (let* ([mapping (unity-context->synth-map unity-cxt)]
-;;           [arduino-cxt (synth-map-arduino-context mapping)]
-;;           [preds (append (channel-predicates type-test)
-;;                          (buffer-predicates type-test))])
-;;      (map (lambda (e)
-;;             (map (lambda (s)
-;;                    (map sym-count
-;;                         (map (lambda (c)
-;;                                (cond-stmts?? c s e arduino-cxt preds))
-;;                              '(4))))
-;;                  '(4)))
-;;           '(4)))])
-
 (define sender
   (unity*
    (declare*
@@ -224,6 +221,21 @@
                                   (recv-buf->nat* 'buf))
                             (recv-buf-full?* 'buf)))))))))
 
-(define (snippets unity-prog)
-  (append (channel-predicates unity-prog)
-          (buffer-predicates unity-prog)))
+(time
+ (let* ([prog channel-test]
+        [synth-map (unity-prog->synth-map prog)]
+        [synth-tr (unity-prog->synth-traces prog synth-map)]
+        [buffer-preds (buffer-predicates prog synth-map)]
+        [channel-preds (channel-predicates prog synth-map)]
+        [assign-guarded-traces (synth-traces-assign synth-tr)])
+   (map
+    (lambda (guarded-tr)
+      (begin
+        (clear-asserts!)
+        (cons (try-synth-guard guarded-tr
+                               synth-map
+                               channel-preds)
+              (try-synth-trace guarded-tr
+                               synth-map
+                               '()))))
+    assign-guarded-traces)))
