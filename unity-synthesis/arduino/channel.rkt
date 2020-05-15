@@ -1,14 +1,15 @@
-#lang rosette
+#lang rosette/safe
 
 (require "../util.rkt"
          "environment.rkt"
+         "inversion.rkt"
          "semantics.rkt"
+         "symbolic.rkt"
          "syntax.rkt"
+         rosette/lib/match
          (prefix-in unity: "../unity/environment.rkt")
          (prefix-in unity: "../unity/semantics.rkt")
-         (prefix-in unity: "../unity/syntax.rkt")
-         "inversion.rkt"
-         "symbolic.rkt")
+         (prefix-in unity: "../unity/syntax.rkt"))
 
 ;; Synthesize snippets related to channels!
 ;; empty channels?
@@ -21,58 +22,55 @@
 ;; in the UNITY context
 ;;
 ;; unity_program -> list[arduino expressions]
-(define (channel-predicates unity-prog)
+(define (channel-predicates unity-prog synthesis-map)
   (match unity-prog
     [(unity:unity*
       (unity:declare* unity-cxt)
       _
       _)
 
-     (let* ([s-map (unity-context->synth-map unity-cxt)]
-            [arduino-cxt (synth-map-arduino-context s-map)]
-            [arduino-st->unity-st (synth-map-arduino-state->unity-state s-map)]
-            [arduino-state (symbolic-state arduino-cxt)]
-            [unity-state (arduino-st->unity-st arduino-state)]
+     (let* ([arduino-cxt (synth-map-arduino-context synthesis-map)]
+            [arduino-st->unity-st (synth-map-arduino-state->unity-state synthesis-map)]
+            [arduino-st (synth-map-arduino-symbolic-state synthesis-map)]
+            [unity-stobj (unity:stobj (arduino-st->unity-st arduino-st))]
             [unity-recv-channels (type-in-context 'recv-channel unity-cxt)]
             [unity-send-channels (type-in-context 'send-channel unity-cxt)])
 
-     (define (helper predicate channels)
-       (match channels
-         ['() '()]
-         [(cons channel-id tail)
+       (define (helper predicate channels)
+         (match channels
+           ['() '()]
+           [(cons channel-id tail)
 
-          (define (try-synth exp-depth)
-            (let* ([start-time (current-seconds)]
-                   [sketch (exp?? exp-depth arduino-cxt '())]
-                   [unity-expr (apply predicate (list channel-id))]
-                   [arduino-val (evaluate-expr sketch arduino-cxt arduino-state)]
-                   [unity-val (unity:evaluate-expr unity-expr unity-cxt unity-state)]
-                   [model (synthesize
-                           #:forall
-                           arduino-state
-                           #:assume
-                           (assert
-                            (boolean? unity-val))
-                           #:guarantee
-                           (assert
-                            (eq?
-                             (byte->bool arduino-val)
-                             unity-val)))])
-              (begin
-                (display (format "try-synth expr ~a in ~a sec.~n"
-                                 exp-depth (- (current-seconds) start-time))
-                         (current-error-port))
-                (if (sat? model)
-                    (evaluate sketch model)
-                    (if (>= exp-depth max-expression-depth)
-                        (error 'synth-arduino-declare
-                               "Synthesis failure for expr ~a" unity-expr)
-                        (try-synth (add1 exp-depth)))))))
+            (define (try-synth exp-depth)
+              (let* ([start-time (current-seconds)]
+                     [sketch (exp?? exp-depth arduino-cxt '())]
+                     [unity-expr (apply predicate (list channel-id))]
+                     [arduino-val (evaluate-expr sketch arduino-cxt arduino-st)]
+                     [unity-val (unity:evaluate-expr unity-expr unity-cxt unity-stobj)]
+                     [model (synthesize
+                             #:forall
+                             arduino-st
+                             #:assume
+                             (assert
+                              (boolean? unity-val))
+                             #:guarantee
+                             (assert
+                              (eq? (byte->bool arduino-val)
+                                   unity-val)))])
+                (begin
+                  (display (format "try-synth expr ~a ~a in ~a sec.~n"
+                                   unity-expr exp-depth (- (current-seconds) start-time))
+                           (current-error-port))
+                  (if (sat? model)
+                      (evaluate sketch model)
+                      (if (>= exp-depth max-expression-depth)
+                          (format "synthesis failure for expr ~a" unity-expr)
+                          (try-synth (add1 exp-depth)))))))
 
-          (cons (try-synth 0)
-                (helper predicate tail))]))
+            (cons (try-synth 0)
+                  (helper predicate tail))]))
 
-     (append (helper unity:full?* unity-recv-channels)
-             (helper unity:empty?* unity-send-channels)))]))
+       (append (helper unity:full?* unity-recv-channels)
+               (helper unity:empty?* unity-send-channels)))]))
 
 (provide channel-predicates)
