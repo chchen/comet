@@ -14,11 +14,29 @@
          ;; unsafe! only allowed for concrete evaluation
          (only-in racket/base string->symbol))
 
+(struct synth-map
+  (unity-external-vars
+   unity-internal-vars
+   arduino-context
+   arduino-symbolic-state
+   arduino-state->unity-state)
+  #:transparent)
+
+(struct synth-traces
+  (initially
+   assign)
+  #:transparent)
+
+(struct guarded-trace
+  (guard
+   trace)
+  #:transparent)
+
 (define max-expression-depth
-  3)
+  5)
 
 (define max-statement-depth
-  5)
+  3)
 
 (define max-condition-depth
   2)
@@ -68,11 +86,6 @@
 
   (helper context))
 
-(struct synth-map
-  (arduino-context
-   arduino-state->unity-state)
-  #:transparent)
-
 ;; The Arduino model admits three different sorts of mutable references: byte
 ;; variables, input pins, and output pins. Variables are used for internal
 ;; state, and pins are used for external state (input/output).
@@ -114,9 +127,12 @@
        (cons (cons id (fn state))
              (state-mapper tail state))]))
 
-  (define (helper unity-cxt arduino-cxt state-map current-pin)
-    (match unity-cxt
-      ['() (synth-map arduino-cxt
+  (define (helper working-unity-cxt arduino-cxt state-map current-pin)
+    (match working-unity-cxt
+      ['() (synth-map (unity:context->external-vars unity-context)
+                      (unity:context->internal-vars unity-context)
+                      arduino-cxt
+                      (symbolic-state arduino-cxt)
                       (lambda (st) (state-mapper state-map st)))]
       [(cons (cons id 'boolean) tail)
        (helper tail
@@ -213,6 +229,55 @@
 
   (helper unity-context '() '() 0))
 
+(define (unity-prog->synth-map unity-prog)
+  (match unity-prog
+    [(unity:unity*
+      (unity:declare* unity-cxt)
+      initially
+      assign)
+     (unity-context->synth-map unity-cxt)]))
+
+(define (unity-prog->synth-traces unity-prog synthesis-map)
+  (define (symbolic-pair->guarded-trace p)
+    (let ([guard (car p)]
+          [stobj (cdr p)])
+      (if (null? stobj)
+          '()
+          (guarded-trace guard
+                         (unity:stobj-state stobj)))))
+
+  (define (stobj->guarded-traces stobj)
+    (if (union? stobj)
+        (flatten
+         (map symbolic-pair->guarded-trace
+              (union-contents stobj)))
+        (symbolic-pair->guarded-trace (cons #t stobj))))
+
+  (match unity-prog
+    [(unity:unity*
+      (unity:declare* unity-cxt)
+      initially
+      assign)
+     (let* ([ext-vars (synth-map-unity-external-vars synthesis-map)]
+            [int-vars (synth-map-unity-internal-vars synthesis-map)]
+            [arduino-cxt (synth-map-arduino-context synthesis-map)]
+            [arduino-st->unity-st (synth-map-arduino-state->unity-state synthesis-map)]
+            [arduino-start-st (synth-map-arduino-symbolic-state synthesis-map)]
+            [unity-start-st (arduino-st->unity-st arduino-start-st)]
+            [unity-start-stobj (unity:stobj unity-start-st)]
+            [unity-start-env (unity:interpret-declare unity-prog unity-start-stobj)]
+            [unity-initialized-env (unity:interpret-initially
+                                    unity-prog
+                                    unity-start-env)]
+            [unity-assigned-env (unity:interpret-assign
+                                 unity-prog
+                                 unity-start-env)])
+       (synth-traces (stobj->guarded-traces
+                      (unity:environment*-stobj unity-initialized-env))
+                     (stobj->guarded-traces
+                      (unity:environment*-stobj unity-assigned-env))))]))
+
+
 ;; Ensure monotonic transition for a value
 ;; For each symbol, ensure that
 ;; 1) post states are consistent
@@ -259,47 +324,18 @@
          max-statement-depth
          max-condition-depth
          max-pin-id
-         symbolic-state
          synth-map
+         synth-map-unity-external-vars
+         synth-map-unity-internal-vars
          synth-map-arduino-context
+         synth-map-arduino-symbolic-state
          synth-map-arduino-state->unity-state
-         unity-context->synth-map
+         synth-traces
+         synth-traces-initially
+         synth-traces-assign
+         guarded-trace
+         guarded-trace-guard
+         guarded-trace-trace
+         unity-prog->synth-map
+         unity-prog->synth-traces
          monotonic-transition-equiv?)
-
-;; (let* ([unity-cxt (list (cons 'o 'send-channel)
-;;                         (cons 'n 'natural))]
-;;        [unity-internals (list (cons 'n 'natural))]
-;;        [unity-externals (list (cons 'i 'recv-channel)
-;;                               (cons 'o 'send-channel))]
-;;        [synth-map (unity-context->synth-map unity-cxt)]
-;;        [arduino-cxt (synth-map-arduino-context synth-map)]
-;;        [mapping (synth-map-arduino-state->unity-state synth-map)]
-;;        [arduino-sym (symbolic-state arduino-cxt)]
-;;        [o-req (get-mapping 'd0 arduino-sym)]
-;;        [o-ack (get-mapping 'd1 arduino-sym)]
-;;        [arduino-pre (cons (cons 'd0 o-ack)
-;;                           arduino-sym)]
-;;        [unity-pre (mapping arduino-pre)]
-;;        [unity-post (cons (cons 'o (unity:channel* #t #t)) unity-pre)]
-;;        [arduino-bad-post (cons (cons 'd2 #t)
-;;                                (cons (cons 'd0 (not o-ack))
-;;                                      arduino-pre))]
-;;        [arduino-good-post (cons (cons 'd0 (not o-ack))
-;;                                 (cons (cons 'd2 #t)
-;;                                       arduino-pre))])
-;;   (list
-;;    (map-eq-modulo-keys-test-reference? unity-internals
-;;                                        unity-pre
-;;                                        unity-post)
-;;    (monotonic-transition-equiv? '(o)
-;;                                 arduino-pre
-;;                                 arduino-bad-post
-;;                                 unity-pre
-;;                                 unity-post
-;;                                 mapping)
-;;    (monotonic-transition-equiv? '(o)
-;;                                 arduino-pre
-;;                                 arduino-good-post
-;;                                 unity-pre
-;;                                 unity-post
-;;                                 mapping)))
