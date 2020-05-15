@@ -87,7 +87,7 @@
       [(bwor* l r) (binexp eval-bwor l r)]
       [(shl* l r) (binexp eval-shl l r)]
       [(shr* l r) (binexp eval-shr l r)]
-      [(read* p) (bool->byte (get-mapping p state))]
+      [(read* p) (unexp bool->byte p)]
       ['false false-byte]
       ['true true-byte]
       ['LOW false-byte]
@@ -231,4 +231,3 @@
                    true-byte)
            (equal? if-cxt
                    init-cxt)))))))
-
