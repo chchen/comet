@@ -104,8 +104,7 @@
 ;;
 ;; This function takes a UNITY context and provides a corresponding synth-map.
 ;;
-;; unity_context ->
-;; (synth-map arduino_context, f: arduino_state -> unity_state)
+;; unity_context -> synth_map
 (define (unity-context->synth-map unity-context)
   ;; num -> num (checking to see if we're within pin bounds)
   (define (next-pin-id current)
@@ -278,47 +277,53 @@
                       (unity:environment*-stobj unity-assigned-env))))]))
 
 
-;; Ensure monotonic transition for a value
-;; For each symbol, ensure that
-;; 1) post states are consistent
-;; 2) pre states are consistent
-;; And for each intermediate state back to the pre state
-;; that it corresponds to the post state
-;; and if it corresponds to the pre state
-;; it continues to correspond to the pre state
-(define (monotonic-transition-equiv? syms arduino-pre arduino-post unity-pre unity-post mapping)
-  (if (null? syms)
-      #t
-      (let* ([sym (car syms)]
-             [mapped-post-val (get-mapping sym (mapping arduino-post))]
-             [unity-pre-val (get-mapping sym unity-pre)]
-             [unity-post-val (get-mapping sym unity-post)])
+;; Ensures a monotonic transition for each key-value
+;;
+;; For each arduino pre and post state, we generate a inclusive list of
+;; intermediate states, project them into UNITY states, and for every key, we
+;; ensure that that key transitions from the unity-pre state into the unity-post
+;; state and stays there.
+(define (monotonic-pre-to-post? keys
+                                arduino-pre
+                                arduino-post
+                                unity-pre
+                                unity-post
+                                arduino-st->unity-st)
 
-        (define (transition-ok? test-state pre-phase?)
-          (let* ([mapped-test-val (get-mapping sym (mapping test-state))]
-                 [pre-eq? (eq? mapped-test-val unity-pre-val)]
-                 [post-eq? (eq? mapped-test-val unity-post-val)])
-            (if (eq? test-state arduino-pre)
-                ;; We are in the initial state
-                #t
-                ;; We are in an intermediate state
-                (and (if pre-phase?
-                         ;; we're locked into matching against pre-state
-                         pre-eq?
-                         ;; we can match either pre or post state
-                         (or pre-eq?
-                             post-eq?))
-                     (transition-ok? (cdr test-state)
-                                     pre-eq?)))))
+  (define (prefix-states arduino-st)
+    (if (eq? arduino-st arduino-pre)
+        (list (arduino-st->unity-st arduino-pre))
+        (cons (arduino-st->unity-st arduino-st)
+              (prefix-states (cdr arduino-st)))))
 
-        (and (eq? mapped-post-val unity-post-val)
-             (transition-ok? arduino-post #f)
-             (monotonic-transition-equiv? (cdr syms)
-                                          arduino-pre
-                                          arduino-post
-                                          unity-pre
-                                          unity-post
-                                          mapping)))))
+  (define (key-trace key states pre-val post-val)
+    (map (lambda (s)
+           (let ([val (get-mapping key s)])
+             (cond
+               [(eq? val pre-val) 'pre]
+               [(eq? val post-val) 'post]
+               [else 'fail])))
+         states))
+
+  (define (monotonic-ok? phase last-phase)
+    (if (or (eq? last-phase 'fail)
+            (eq? phase 'fail)
+            (and (eq? phase 'post)
+                 (eq? last-phase 'pre)))
+        'fail
+        phase))
+
+  (let ([prefixes (prefix-states arduino-post)])
+
+    (define (key-transition-ok? key)
+      (let* ([pre-val (get-mapping key unity-pre)]
+             [post-val (get-mapping key unity-post)]
+             [trace (key-trace key prefixes pre-val post-val)])
+        (eq? (foldl monotonic-ok? 'post trace)
+             'pre)))
+
+    (map key-transition-ok?
+         keys)))
 
 (provide max-expression-depth
          max-statement-depth
@@ -338,4 +343,4 @@
          guarded-trace-trace
          unity-prog->synth-map
          unity-prog->synth-traces
-         monotonic-transition-equiv?)
+         monotonic-pre-to-post?)

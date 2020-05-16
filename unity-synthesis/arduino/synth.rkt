@@ -56,6 +56,16 @@
                                                arduino-start-st)]
              [arduino-post-cxt (environment*-context arduino-post-env)]
              [arduino-post-st (environment*-state arduino-post-env)]
+             [post-states-eq? (map-eq-modulo-keys? (append ext-vars
+                                                    int-vars)
+                                            (arduino-st->unity-st arduino-post-st)
+                                            unity-trace)]
+             [ext-vars-monotonic? (monotonic-pre-to-post? ext-vars
+                                                          arduino-start-st
+                                                          arduino-post-st
+                                                          unity-start-st
+                                                          unity-trace
+                                                          arduino-st->unity-st)]
              [model (synthesize
                      #:forall
                      arduino-start-st
@@ -66,15 +76,8 @@
                       (and
                        (eq? arduino-post-cxt
                             arduino-cxt)
-                       (map-eq-modulo-keys? int-vars
-                                            (arduino-st->unity-st arduino-post-st)
-                                            unity-trace)
-                       (monotonic-transition-equiv? ext-vars
-                                                    arduino-start-st
-                                                    arduino-post-st
-                                                    unity-start-st
-                                                    unity-trace
-                                                    arduino-st->unity-st))))])
+                       post-states-eq?
+                       ext-vars-monotonic?)))])
         (begin
           (display (format "try-synth stmt/expr ~a/~a in ~a sec.~n"
                            stmt-depth exp-depth (- (current-seconds) start-time))

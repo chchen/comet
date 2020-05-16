@@ -36,13 +36,11 @@
 
 ;; Test if maps are equal given up to a list of keys
 (define (map-eq-modulo-keys? keys map-l map-r)
-  (if (null? keys)
-      #t
-      (let ([id (car keys)]
-            [tail (cdr keys)])
-        (and (eq? (get-mapping id map-l)
-                  (get-mapping id map-r))
-             (map-eq-modulo-keys? tail map-l map-r)))))
+  (define (val-eq? k)
+    (eq? (get-mapping k map-l)
+         (get-mapping k map-r)))
+
+  (andmap val-eq? keys))
 
 (provide equal-length?
          in-list?
