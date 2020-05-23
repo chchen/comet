@@ -20,21 +20,9 @@
    value)
   #:transparent)
 
-;; Receive buffer type. Booleans in "little endian" order
-;; len is the "word size"
-;; recv are the number of bits received
-;; buffer is ready to "use" when recv = (len vals)
-(struct recv-buf*
-  (rcvd
-   vals)
-  #:transparent)
-
-;; Send buffer type. Booleans in "big endian" order
-;; len is the "word size"
-;; sent are the number of bits already sent
-;; buffer is exhausted when sent = (len vals)
-(struct send-buf*
-  (sent
+;; Boolean buffer with a cursor
+(struct buffer*
+  (cursor
    vals)
   #:transparent)
 
@@ -202,14 +190,10 @@
          channel*?
          channel*-valid
          channel*-value
-         recv-buf*
-         recv-buf*?
-         recv-buf*-rcvd
-         recv-buf*-vals
-         send-buf*
-         send-buf*?
-         send-buf*-sent
-         send-buf*-vals
+         buffer*
+         buffer*?
+         buffer*-cursor
+         buffer*-vals
          unity*
          declare*
          initially*
@@ -246,13 +230,19 @@
     (list (cons 'reg 'natural)
           (cons 'in-read 'boolean)
           (cons 'in 'recv-channel)
-          (cons 'out 'send-channel)))
+          (cons 'out 'send-channel)
+          (cons 'inbox 'recv-buf)
+          (cons 'outbox 'send-buf)))
    (initially*
     (list
      (:=* (list 'reg
-                'in-read)
+                'in-read
+                'inbox
+                'outbox)
           (list 42
-                #f))))
+                #f
+                (nat->send-buf* 8 42)
+                (empty-recv-buf* 8)))))
    (assign*
     (list
      ;; non-deterministic choice #1

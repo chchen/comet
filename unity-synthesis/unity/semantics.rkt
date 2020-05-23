@@ -15,7 +15,6 @@
    trace)
   #:transparent)
 
-
 (define (external? typ)
   (case typ
     ['boolean #f]
@@ -70,47 +69,36 @@
   (channel* #t val))
 
 (define (eval-send-buf-empty? buf)
-  (= (send-buf*-sent buf)
-     (length (send-buf*-vals buf))))
+  (match buf
+    [(buffer* sent vals)
+     (>= sent (length vals))]))
 
 (define (eval-recv-buf-full? buf)
-  (= (recv-buf*-rcvd buf)
-     (length (recv-buf*-vals buf))))
+  (match buf
+    [(buffer* rcvd vals)
+     (>= rcvd (length vals))]))
 
 (define (eval-nat->send-buf len val)
-  (define (nat->bool-list v pow)
-    (if (< pow 0) ;; base case
-        '()
-        (let ([e (expt 2 pow)])
-          (if (>= v e)
-              (cons #t (nat->bool-list (- v e)
-                                       (sub1 pow)))
-              (cons #f (nat->bool-list v
-                                       (sub1 pow)))))))
-
-  (send-buf* 0
-             (nat->bool-list val (sub1 len))))
+  (let ([bools (map bitvector->bool
+                        (bitvector->bits
+                         (bv val len)))])
+    (buffer* 0 bools)))
 
 (define (eval-send-buf-get buf)
-  (define (walk-list dist lst)
-    (if (<= dist 0)
-        (car lst)
-        (walk-list (sub1 dist) (cdr lst))))
-
-  (walk-list send-buf*-sent
-             send-buf*-vals))
+  (match buf
+    [(buffer* sent vals)
+     (list-ref vals sent)]))
 
 (define (eval-send-buf-next buf)
-  (send-buf* (add1 send-buf*-sent)
-             send-buf*-vals))
+  (match buf
+    [(buffer* sent vals)
+     (buffer* (add1 sent) vals)]))
 
 (define (eval-empty-recv-buf len)
-  (define (false-list dist)
-    (if (<= dist 0)
-        '()
-        (cons #f (false-list (sub1 dist)))))
-
-  (recv-buf* 0 (false-list len)))
+  (let ([bools (map bitvector->bool
+                    (bitvector->bits
+                     (bv 0 len)))])
+    (buffer* 0 bools)))
 
 (define (eval-recv-buf-put buf item)
   (define (insert-list dist item lst)
@@ -123,21 +111,14 @@
                   (insert-list (sub1 dist) item (cdr lst))))))
 
   (match buf
-    [(recv-buf* rcvd vals)
-     (recv-buf* (add1 rcvd) (insert-list rcvd item vals))]))
+    [(buffer* rcvd vals)
+     (buffer* (add1 rcvd) (insert-list rcvd item vals))]))
 
 (define (eval-recv-buf->nat buf)
-  (define (bool-list->nat l pow)
-    (if (null? l)
-        0
-        (let ([e (expt 2 pow)]
-              [head (car l)]
-              [tail (cdr l)])
-          (if head
-              (+ e (bool-list->nat tail (+ 1 pow)))
-              (bool-list->nat tail (+ 1 pow))))))
-
-  (bool-list->nat recv-buf*-vals 0))
+  (match buf
+    [(buffer* rcvd vals)
+     (bitvector->natural
+      (concat vals))]))
 
 ;; Evaluate an expression. Takes an expression, context, and a state
 (define (evaluate-expr expression context state-object)
@@ -149,8 +130,8 @@
          ['natural (natural? val)]
          ['recv-channel (channel*? val)]
          ['send-channel (channel*? val)]
-         ['recv-buf (recv-buf*? val)]
-         ['send-buf (send-buf*? val)]
+         ['recv-buf (buffer*? val)]
+         ['send-buf (buffer*? val)]
          [else #f]))
 
      (define (unary next-func expr)
@@ -220,7 +201,7 @@
 (define (interpret-assign-stmts assignments context state-object)
   (match state-object
     [(stobj state)
-     
+
      (define (build-trace vars exprs)
        (map (lambda (v e)
               (cons v
@@ -246,7 +227,7 @@
 
      (define (apply-traces traces)
        (match traces
-         ['() '()]
+         ['() (stobj state)]
          [(cons head tail)
           (match head
             [(guard-trace guard? trace)
@@ -325,6 +306,15 @@
 (define-symbolic W N integer?)
 (define-symbolic X Y boolean?)
 
+(define (transfer-buf from to)
+  (if (or (eval-send-buf-empty? from)
+          (eval-recv-buf-full? to))
+      to
+      (transfer-buf
+       (eval-send-buf-next from)
+       (eval-recv-buf-put to
+                          (eval-send-buf-get from)))))
+
 (assert
  (unsat?
   (verify
@@ -337,8 +327,7 @@
    (assert
     (let* ([word-size W]
            [send-buffer (eval-nat->send-buf word-size N)]
-           [send-word (send-buf*-vals send-buffer)]
-           [recv-word (reverse send-word)]
-           [recv-buffer (recv-buf* word-size recv-word)]
+           [empty-recv-buf (eval-empty-recv-buf word-size)]
+           [recv-buffer (transfer-buf send-buffer empty-recv-buf)]
            [recv-nat (eval-recv-buf->nat recv-buffer)])
-      (eq? N recv-nat)))))) 
+      (eq? N recv-nat))))))
