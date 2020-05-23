@@ -123,7 +123,7 @@
                   (try-state (add1 stmt-depth) exp-depth))))))
 
     (if initialized-cxt?
-        (try-state 0 2)
+        (try-state 0 0)
         (append (try-context 0)
                 (try-state 0 0)))))
 
