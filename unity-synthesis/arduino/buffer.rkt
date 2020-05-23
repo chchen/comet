@@ -36,45 +36,53 @@
             [arduino-st->unity-st (synth-map-arduino-state->unity-state synthesis-map)]
             [arduino-st (synth-map-arduino-symbolic-state synthesis-map)]
             [unity-stobj (unity:stobj (arduino-st->unity-st arduino-st))]
-            [send-buffers (type-in-context 'send-buf unity-cxt)]
-            [recv-buffers (type-in-context 'recv-buf unity-cxt)])
+            [unity-send-buffers (type-in-context 'send-buf unity-cxt)]
+            [unity-recv-buffers (type-in-context 'recv-buf unity-cxt)])
 
-     (define (helper predicate buffers)
-       (match buffers
-         ['() '()]
-         [(cons buffer-id tail)
+       (define (try-synth exp-depth predicate buffer-id guard)
+         (let* ([start-time (current-seconds)]
+                [sketch (exp?? exp-depth arduino-cxt '())]
+                [unity-expr (apply predicate (list buffer-id))]
+                [arduino-val (evaluate-expr sketch arduino-cxt arduino-st)]
+                [guard-val (unity:evaluate-expr guard unity-cxt unity-stobj)]
+                [unity-val (unity:evaluate-expr unity-expr unity-cxt unity-stobj)]
+                [unity-val-boolean? (boolean? unity-val)]
+                [eval-eq? (eq? (byte->bool arduino-val)
+                               unity-val)]
+                [model (begin
+                         (clear-asserts!)
+                         (synthesize
+                          #:forall
+                          arduino-st
+                          #:assume
+                          (assert
+                           (and guard-val
+                                unity-val-boolean?))
+                          #:guarantee
+                          (assert eval-eq?)))])
+           (begin
+             (display (format "try-synth expr ~a ~a in ~a sec.~n"
+                              unity-expr exp-depth (- (current-seconds) start-time))
+                      (current-error-port))
+             (if (sat? model)
+                 (evaluate sketch model)
+                 (if (>= exp-depth max-expression-depth)
+                     (format "synthesis failure for expr ~a" unity-expr)
+                     (try-synth (add1 exp-depth) predicate buffer-id guard))))))
 
-          (define (try-synth exp-depth)
-            (let* ([start-time (current-seconds)]
-                   [sketch (exp?? exp-depth arduino-cxt '())]
-                   [unity-expr (apply predicate (list buffer-id))]
-                   [arduino-val (evaluate-expr sketch arduino-cxt arduino-st)]
-                   [unity-val (unity:evaluate-expr unity-expr unity-cxt unity-stobj)]
-                   [model (synthesize
-                           #:forall
-                           arduino-st
-                           #:assume
-                           (assert
-                            (boolean? unity-val))
-                           #:guarantee
-                           (assert
-                            (eq? (byte->bool arduino-val)
-                                 unity-val)))])
-              (begin
-                (display (format "try-synth expr ~a ~a in ~a sec.~n"
-                                 unity-expr exp-depth (- (current-seconds) start-time))
-                         (current-error-port))
-                (if (sat? model)
-                    (evaluate sketch model)
-                    (if (>= exp-depth max-expression-depth)
-                        (format "synthesis failure for expr ~a" unity-expr)
-                        (try-synth (add1 exp-depth)))))))
+       (define (send-buf-empty buffer-id)
+         (try-synth 0 unity:send-buf-empty?* buffer-id #t))
 
-          (cons (try-synth 0)
-                (helper predicate tail))]))
+       (define (send-buf-get buffer-id)
+         (let ([guard-expr (unity:not*
+                            (apply unity:send-buf-empty?* (list buffer-id)))])
+           (try-synth 0 unity:send-buf-get* buffer-id guard-expr)))
 
-     (append (helper unity:send-buf-empty?* send-buffers)
-             (helper unity:send-buf-get* send-buffers)
-             (helper unity:recv-buf-full?* recv-buffers)))]))
+       (define (recv-buf-full buffer-id)
+         (try-synth 0 unity:recv-buf-full?* buffer-id #t))
+
+       (append (map send-buf-empty unity-send-buffers)
+               (map send-buf-get unity-send-buffers)
+               (map recv-buf-full unity-recv-buffers)))]))
 
 (provide buffer-predicates)

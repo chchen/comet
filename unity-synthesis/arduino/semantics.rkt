@@ -35,16 +35,18 @@
       false-byte))
 
 (define (eval-and l r)
-  (if (false-byte? l)
-      l
-      r))
+  (if (and (true-byte? l)
+           (true-byte? r))
+      true-byte
+      false-byte))
 
 (define (eval-or l r)
-  (if (false-byte? l)
-      r
-      l))
+  (if (or (true-byte? l)
+          (true-byte? r))
+      true-byte
+      false-byte))
 
-(define (eval-le l r)
+(define (eval-lt l r)
   (if (bvult l r)
       true-byte
       false-byte))
@@ -80,7 +82,7 @@
       [(not* e) (unexp eval-not e)]
       [(and* l r) (binexp eval-and l r)]
       [(or* l r) (binexp eval-or l r)]
-      [(le* l r) (binexp eval-le l r)]
+      [(lt* l r) (binexp eval-lt l r)]
       [(eq* l r) (binexp eval-eq l r)]
       [(add* l r) (binexp eval-add l r)]
       [(bwand* l r) (binexp eval-bwand l r)]

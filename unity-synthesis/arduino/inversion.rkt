@@ -35,7 +35,7 @@
                         (list (not* (exp?? (sub1 depth) cxt extra-exps))
                               ((choose* and*
                                         or*
-                                        le*
+                                        lt*
                                         eq*
                                         add*
                                         bwand*
@@ -47,11 +47,10 @@
                         terminals))
         (apply choose* terminals))))
 
-;; Single, "simple" statements
-;; variable/pin declaration and
-;; variable/pin assignment
+;; Single, "context-altering" statements
+;; variable/pin declaration
 ;; Nat -> Context -> Choose Tree
-(define (simple-stmt?? exp-depth cxt extra-exps)
+(define (context-stmt?? cxt)
   (let* ([inputs (type-in-context 'pin-in cxt)]
          [outputs (type-in-context 'pin-out cxt)]
          [vars (type-in-context 'byte cxt)]
@@ -61,54 +60,74 @@
                       '())]
          [o-terms (if (pair? outputs)
                       (list (pin-mode* (apply choose* outputs)
-                                       'OUTPUT)
-                            (write* (apply choose* outputs)
-                                    (exp?? exp-depth cxt extra-exps)))
+                                       'OUTPUT))
                       '())]
          [v-terms (if (pair? vars)
-                      (list (byte* (apply choose* vars))
-                            (:=* (apply choose* vars)
-                                 (exp?? exp-depth cxt extra-exps)))
+                      (list (byte* (apply choose* vars)))
                       '())]
          [choose-terms (append i-terms
                                o-terms
                                v-terms)])
     (apply choose* choose-terms)))
 
-;; Sequence of unconditional statements
+;; Single, "state-changing" statements
+;; variable/pin assignment
+;; Nat -> Context -> Choose Tree
+(define (state-stmt?? exp-depth cxt extra-exps)
+  (let* ([outputs (type-in-context 'pin-out cxt)]
+         [vars (type-in-context 'byte cxt)]
+         [o-terms (if (pair? outputs)
+                      (list (write* (apply choose* outputs)
+                                    (exp?? exp-depth cxt extra-exps)))
+                      '())]
+         [v-terms (if (pair? vars)
+                      (list (:=* (apply choose* vars)
+                                 (exp?? exp-depth cxt extra-exps)))
+                      '())]
+         [choose-terms (append o-terms
+                               v-terms)])
+    (apply choose* choose-terms)))
+
+;; Sequence of unconditional context-altering statements
 ;; Nat -> Nat -> Context -> Choose Tree
-(define (uncond-stmts?? stmt-depth exp-depth cxt extra-exps)
+(define (context-stmts?? stmt-depth cxt)
   (if (positive? stmt-depth)
-      (cons (simple-stmt?? exp-depth cxt extra-exps)
-            (uncond-stmts?? (sub1 stmt-depth)
-                            exp-depth
-                            cxt
-                            extra-exps))
+      (cons (context-stmt?? cxt)
+            (context-stmts?? (sub1 stmt-depth)
+                             cxt))
+      '()))
+
+;; Sequence of unconditional state-altering statements
+;; Nat -> Nat -> Context -> Choose Tree
+(define (state-stmts?? stmt-depth exp-depth cxt extra-exps)
+  (if (positive? stmt-depth)
+      (cons (state-stmt?? exp-depth cxt extra-exps)
+            (state-stmts?? (sub1 stmt-depth)
+                           exp-depth
+                           cxt
+                           extra-exps))
       '()))
 
 ;; Sequence of conditional statements. Think of the
 ;; conditional expressions on one line, with unconditional
 ;; statements of length stmt-depth hung on each
-;; Nat -> Nat -> Nat -> Context -> Choose Tree
-(define (cond-stmts?? cond-depth stmt-depth exp-depth cxt extra-exps)
+;; Nat -> Expressions -> Statements -> Choose Tree
+(define (cond-stmts?? cond-depth exps stmts)
   (if (positive? cond-depth)
-      (cons (if* (exp?? exp-depth cxt extra-exps)
-                 (uncond-stmts?? stmt-depth
-                                 exp-depth
-                                 cxt
-                                 extra-exps)
+      (cons (if* (apply choose* exps)
+                 (apply choose* stmts)
                  (cond-stmts?? (sub1 cond-depth)
-                               stmt-depth
-                               exp-depth
-                               cxt
-                               extra-exps))
+                               exps
+                               stmts))
             '())
       '()))
 
 (provide type-in-context
          exp??
-         simple-stmt??
-         uncond-stmts??
+         context-stmt??
+         state-stmt??
+         context-stmts??
+         state-stmts??
          cond-stmts??)
 
 ;; (define (sym-count u)

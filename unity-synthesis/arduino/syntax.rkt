@@ -13,7 +13,7 @@
 ;; Byte -> Byte -> Byte
 (struct and* (left right) #:transparent)
 (struct or* (left right) #:transparent)
-(struct le* (left right) #:transparent)
+(struct lt* (left right) #:transparent)
 (struct eq* (left right) #:transparent)
 
 ;; Traditional "Byte/Bitwise" Expressions
@@ -115,7 +115,7 @@
          not*
          and*
          or*
-         le*
+         lt*
          eq*
          add*
          bwand*

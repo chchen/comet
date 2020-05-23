@@ -35,35 +35,8 @@
 (define max-expression-depth
   5)
 
-(define max-statement-depth
-  3)
-
-(define max-condition-depth
-  2)
-
 (define max-pin-id
   21)
-
-;; bitvector -> nat -> big endian boolean list
-(define (bitvec->be-bool-list len bitvec)
-  (define 0x01 (bv 1 8))
-  (define 0x80 (bv (expt 2 7) 8))
-
-  (if (<= len 0)
-      '()
-      (cons (true-byte? (bvand bitvec 0x80))
-            (bitvec->be-bool-list (sub1 len)
-                                  (bvshl bitvec 0x01)))))
-
-;; bitvector -> nat -> little endian boolean list
-(define (bitvec->le-bool-list len bitvec)
-  (define 0x01 (bv 1 8))
-
-  (if (<= len 0)
-      '()
-      (cons (true-byte? (bvand bitvec 0x01))
-            (bitvec->le-bool-list (sub1 len)
-                                  (bvlshr bitvec 0x01)))))
 
 (define (symbolic-state context)
   (define (symbolic-boolean)
@@ -195,34 +168,36 @@
                                      (unity:channel* #f null)))))
                        state-map)
                  (next-pin-id val-pin)))]
-      [(cons (cons id 'send-buf) tail)
-       (let ([vals-id (symbol-format "~a_vals" id)]
-             [sent-id (symbol-format "~a_sent" id)])
+      [(cons (cons id 'recv-buf) tail)
+       (let ([rcvd-id (symbol-format "~a_rcvd" id)]
+             [vals-id (symbol-format "~a_vals" id)])
          (helper tail
-                 (append (list (cons vals-id 'byte)
-                               (cons sent-id 'byte))
+                 (append (list (cons rcvd-id 'byte)
+                               (cons vals-id 'byte))
                          arduino-cxt)
                  (cons (cons id
                              (lambda (st)
-                               (let ([vals-val (get-mapping vals-id st)]
-                                     [sent-val (bitvector->natural (get-mapping sent-id st))])
-                                 (unity:send-buf* sent-val
-                                                  (bitvec->be-bool-list 8 vals-val)))))
+                               (let ([rcvd-val (get-mapping rcvd-id st)]
+                                     [vals-val (get-mapping vals-id st)])
+                                 (unity:buffer* (bitvector->natural rcvd-val)
+                                                (map bitvector->bool
+                                                     (bitvector->bits vals-val))))))
                        state-map)
                  current-pin))]
-      [(cons (cons id 'recv-buf) tail)
-       (let ([vals-id (symbol-format "~a_vals" id)]
-             [rcvd-id (symbol-format "~a_rcvd" id)])
+      [(cons (cons id 'send-buf) tail)
+       (let ([sent-id (symbol-format "~a_sent" id)]
+             [vals-id (symbol-format "~a_vals" id)])
          (helper tail
-                 (append (list (cons vals-id 'byte)
-                               (cons rcvd-id 'byte))
+                 (append (list (cons sent-id 'byte)
+                               (cons vals-id 'byte))
                          arduino-cxt)
                  (cons (cons id
                              (lambda (st)
-                               (let ([vals-val (get-mapping vals-id st)]
-                                     [rcvd-val (bitvector->natural (get-mapping rcvd-id st))])
-                                 (unity:recv-buf* rcvd-val
-                                                  (bitvec->le-bool-list 8 vals-val)))))
+                               (let ([sent-val (get-mapping sent-id st)]
+                                     [vals-val (get-mapping vals-id st)])
+                                 (unity:buffer* (bitvector->natural sent-val)
+                                                (map bitvector->bool
+                                                     (bitvector->bits vals-val))))))
                        state-map)
                  current-pin))]))
 
@@ -326,8 +301,6 @@
          keys)))
 
 (provide max-expression-depth
-         max-statement-depth
-         max-condition-depth
          max-pin-id
          synth-map
          synth-map-unity-external-vars
