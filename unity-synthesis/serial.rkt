@@ -8,7 +8,9 @@
          "arduino/synth.rkt"
          "unity/syntax.rkt"
          (prefix-in arduino: "arduino/environment.rkt")
-         (prefix-in arduino: "arduino/syntax.rkt"))
+         (prefix-in arduino: "arduino/syntax.rkt")
+         (prefix-in unity: "unity/environment.rkt")
+         (prefix-in unity: "unity/semantics.rkt"))
 
 (define boolean-test
   (unity*
@@ -77,22 +79,17 @@
                                 (arduino:not* (arduino:eq* (arduino:read* 'd0)
                                                            (arduino:read* 'd1)))))
     (list
-     (arduino::=* 'in-read
-                  'true)
-     (arduino:write* 'd5
-                     (arduino:read* 'd2))
-     (arduino:write* 'd3
-                     (arduino:not* (arduino:read* 'd4))))
-    (arduino:if*
-     (arduino:and* 'in-read
-                   (arduino:not* (arduino:eq* (arduino:read* 'd0)
-                                              (arduino:read* 'd1))))
-     (list
-      (arduino::=* 'in-read
-                   'false)
-      (arduino:write* 'd1
-                      (arduino:read* 'd0)))
-     '()))))
+     (arduino::=* 'in-read 'true)
+     (arduino:write* 'd5 (arduino:read* 'd2))
+     (arduino:write* 'd3 (arduino:not* (arduino:read* 'd4))))
+    (list
+     (arduino:if*
+      (arduino:and* 'in-read
+                    (arduino:not* (arduino:eq* (arduino:read* 'd0) (arduino:read* 'd1))))
+      (list
+       (arduino::=* 'in-read 'false)
+       (arduino:write* 'd1 (arduino:read* 'd0)))
+      '())))))
 
 (define recv-buf-test
   (unity*
@@ -100,15 +97,18 @@
     (list (cons 'x 'boolean)
           (cons 'r 'recv-buf)))
    (initially*
-    (:=* (list 'x
-               'r)
-         (list #f
-               (empty-recv-buf* 8))))
+    (list
+     (:=* (list 'x
+                'r)
+          (list #f
+                (empty-recv-buf* 8)))))
    (assign*
-    (list (:=* (list 'r)
-               (case*
-                (list (cons (recv-buf-put* 'r 'x)
-                            (not* (recv-buf-full?* 'r))))))))))
+    (list
+     (list
+      (:=* (list 'r)
+           (case*
+            (list (cons (list (recv-buf-put* 'r 'x))
+                        (not* (recv-buf-full?* 'r)))))))))))
 
 (define send-buf-test
   (unity*
@@ -116,15 +116,30 @@
     (list (cons 'x 'boolean)
           (cons 's 'send-buf)))
    (initially*
-    (:=* (list 'x
-               's)
-         (list #f
-               (nat->send-buf* 8 1))))
+    (list
+     (:=* (list 'x
+                's)
+          (list #f
+                (nat->send-buf* 8 16)))))
    (assign*
-    (list (:=* (list 'x)
-               (case*
-                (list (cons (send-buf-get* 's)
-                            (not* (send-buf-empty?* 's))))))))))
+    (list
+     (list
+      (:=* (list 's
+                 'x)
+           (case*
+            (list (cons (list (send-buf-next* 's)
+                              (send-buf-get* 's))
+                        (not* (send-buf-empty?* 's)))))))))))
+
+;; (let* ([prog recv-buf-test]
+;;        [start-stobj (unity:stobj (list (cons 'r (recv-buf* 0 '(#f #f)))))]
+;;        [env (unity:interpret-declare prog start-stobj)]
+;;        [env2 (unity:interpret-initially prog env)]
+;;        [context (unity:environment*-context env)]
+;;        [state-object (unity:environment*-stobj env)])
+;;   (unity:evaluate-expr (recv-buf-put* 'r #t)
+;;                        context
+;;                        start-stobj))
 
 (define buf-test
   (unity*
@@ -227,15 +242,31 @@
         [synth-tr (unity-prog->synth-traces prog synth-map)]
         [buffer-preds (buffer-predicates prog synth-map)]
         [channel-preds (channel-predicates prog synth-map)]
-        [assign-guarded-traces (synth-traces-assign synth-tr)])
-   (map
-    (lambda (guarded-tr)
-      (begin
-        (clear-asserts!)
-        (cons (try-synth-guard guarded-tr
-                               synth-map
-                               channel-preds)
-              (try-synth-trace guarded-tr
-                               synth-map
-                               '()))))
-    assign-guarded-traces)))
+        [preds (append buffer-preds
+                       channel-preds)]
+        [initially-guarded-traces (synth-traces-initially synth-tr)]
+        [assign-guarded-traces (synth-traces-assign synth-tr)]
+        [setup-stmts (try-synth-trace initially-guarded-traces
+                                      synth-map
+                                      #f
+                                      '())]
+        [guard-exps (map
+                     (lambda (guarded-tr)
+                       (try-synth-guard guarded-tr
+                                        synth-map
+                                        preds))
+                     assign-guarded-traces)]
+        [assign-stmts (map
+                       (lambda (guarded-tr)
+                         (try-synth-trace guarded-tr
+                                          synth-map
+                                          #t
+                                          buffer-preds))
+                       assign-guarded-traces)])
+ (list setup-stmts
+       guard-exps
+       assign-stmts)))
+;;    ;; (try-synth-loop prog
+;;    ;;                 synth-map
+;;    ;;                 guard-exps
+;;    ;;                 assign-stmts)))
