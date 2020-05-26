@@ -110,6 +110,28 @@
             (list (cons (list (recv-buf-put* 'r 'x))
                         (not* (recv-buf-full?* 'r)))))))))))
 
+(define recv-buf-sketch
+  (list
+   (arduino:if*
+    (arduino:not* (arduino:lt* (bv #x07 8) 'r_rcvd))
+    (list
+     (arduino::=*
+      'r_vals
+      (arduino:bwor*
+       (arduino:bwand*
+        'r_vals
+        (arduino:bwnot*
+         (arduino:shl*
+          (bv 1 8)
+          'r_rcvd)))
+       (arduino:shl*
+        (arduino:and*
+         'x
+         'x)
+        'r_rcvd)))
+     (arduino::=* 'r_rcvd (arduino:add* 'r_rcvd (bv 1 8))))
+    '())))
+
 (define send-buf-test
   (unity*
    (declare*
@@ -130,16 +152,6 @@
             (list (cons (list (send-buf-next* 's)
                               (send-buf-get* 's))
                         (not* (send-buf-empty?* 's)))))))))))
-
-;; (let* ([prog recv-buf-test]
-;;        [start-stobj (unity:stobj (list (cons 'r (recv-buf* 0 '(#f #f)))))]
-;;        [env (unity:interpret-declare prog start-stobj)]
-;;        [env2 (unity:interpret-initially prog env)]
-;;        [context (unity:environment*-context env)]
-;;        [state-object (unity:environment*-stobj env)])
-;;   (unity:evaluate-expr (recv-buf-put* 'r #t)
-;;                        context
-;;                        start-stobj))
 
 (define buf-test
   (unity*
@@ -236,8 +248,16 @@
                                   (recv-buf->nat* 'buf))
                             (recv-buf-full?* 'buf)))))))))
 
+
+;; (time
+;;  (let* ([prog recv-buf-test]
+;;         [sketch recv-buf-sketch]
+;;         [synth-map (unity-prog->synth-map prog)]
+;;         [verify-model (verify-loop prog sketch synth-map)])
+;;    verify-model))
+
 (time
- (let* ([prog channel-test]
+ (let* ([prog recv-buf-test]
         [synth-map (unity-prog->synth-map prog)]
         [synth-tr (unity-prog->synth-traces prog synth-map)]
         [buffer-preds (buffer-predicates prog synth-map)]
