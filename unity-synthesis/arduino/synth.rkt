@@ -188,6 +188,67 @@
 
     (try-cond 0)))
 
+(define (verify-loop unity-prog arduino-loop synthesis-map)
+  (let* ([ext-vars (synth-map-unity-external-vars synthesis-map)]
+         [int-vars (synth-map-unity-internal-vars synthesis-map)]
+         [all-vars (append ext-vars int-vars)]
+
+         [arduino-st->unity-st (synth-map-arduino-state->unity-state synthesis-map)]
+
+         [arduino-cxt (synth-map-arduino-context synthesis-map)]
+         [arduino-start-st (synth-map-arduino-symbolic-state synthesis-map)]
+
+         [unity-start-st (arduino-st->unity-st arduino-start-st)]
+         [unity-start-stobj (unity:stobj unity-start-st)]
+         [unity-start-env (unity:interpret-declare unity-prog unity-start-stobj)]
+
+         [arduino-post-env (interpret-stmt arduino-loop arduino-cxt arduino-start-st)]
+         [arduino-post-cxt (environment*-context arduino-post-env)]
+         [arduino-post-st (environment*-state arduino-post-env)]
+
+         [unity-post-env (unity:interpret-assign unity-prog unity-start-env)]
+         [unity-post-st (unity:stobj-state
+                         (unity:environment*-stobj unity-post-env))]
+
+         [context-unchanged? (eq? arduino-cxt arduino-post-cxt)]
+         [post-states-eq? (map-eq-modulo-keys?
+                           all-vars
+                           (arduino-st->unity-st arduino-post-st)
+                           unity-post-st)]
+         [ext-vars-monotonic? (monotonic-pre-to-post?
+                               ext-vars
+                               arduino-start-st
+                               arduino-post-st
+                               unity-start-st
+                               unity-post-st
+                               arduino-st->unity-st)]
+
+         [model (begin
+                  (clear-asserts!)
+                  (verify
+                   #:guarantee
+                   (assert
+                    (and context-unchanged?
+                         post-states-eq?
+                         ext-vars-monotonic?))))])
+
+    (if (sat? model)
+        (let* ([unity-counterexample (evaluate unity-start-env model)]
+               [arduino-counterexample (evaluate arduino-start-st model)]
+               [unity-trace (unity:interpret-assign unity-prog unity-counterexample)]
+               [arduino-trace (interpret-stmt arduino-loop arduino-cxt arduino-counterexample)])
+          (list
+           (cons 'unity-trace
+                 (unity:stobj-state
+                  (unity:environment*-stobj unity-trace)))
+           (cons 'arduino-trace
+                 (environment*-state arduino-trace))
+           (cons 'arduino-st->unity-st
+                 (arduino-st->unity-st
+                  (environment*-state arduino-trace)))))
+        model)))
+
 (provide try-synth-guard
          try-synth-trace
-         try-synth-loop)
+         try-synth-loop
+         verify-loop)

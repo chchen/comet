@@ -32,7 +32,9 @@
                             extra-exps)])
     (if (positive? depth)
         (apply choose* (append
-                        (list (not* (exp?? (sub1 depth) cxt extra-exps))
+                        (list ((choose* not*
+                                        bwnot*)
+                               (exp?? (sub1 depth) cxt extra-exps))
                               ((choose* and*
                                         or*
                                         lt*
@@ -40,6 +42,7 @@
                                         add*
                                         bwand*
                                         bwor*
+                                        bwxor*
                                         shl*
                                         shr*)
                                (exp?? (sub1 depth) cxt extra-exps)

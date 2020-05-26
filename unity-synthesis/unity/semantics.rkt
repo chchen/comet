@@ -84,6 +84,9 @@
                          (bv val len)))])
     (buffer* 0 bools)))
 
+;; Get the value at the cursor
+;; 0 - least significant/first element
+;; max - most significant/last element
 (define (eval-send-buf-get buf)
   (match buf
     [(buffer* sent vals)
@@ -100,6 +103,10 @@
                      (bv 0 len)))])
     (buffer* 0 bools)))
 
+;; Buffer is a "little endian" list of values
+;; when cursor is at 0, we insert at the least significant
+;; when cursor is maxed out, we insert at the most significant
+;; increment cursor
 (define (eval-recv-buf-put buf item)
   (define (insert-list dist item lst)
     (if (null? lst)

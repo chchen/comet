@@ -56,16 +56,6 @@
       true-byte
       false-byte))
 
-(define eval-add bvadd)
-
-(define eval-bwand bvand)
-
-(define eval-bwor bvor)
-
-(define eval-shl bvshl)
-
-(define eval-shr bvlshr)
-
 ;; Evaluate
 (define (evaluate-expr expression context state)
   (define (unexp next expr)
@@ -84,11 +74,13 @@
       [(or* l r) (binexp eval-or l r)]
       [(lt* l r) (binexp eval-lt l r)]
       [(eq* l r) (binexp eval-eq l r)]
-      [(add* l r) (binexp eval-add l r)]
-      [(bwand* l r) (binexp eval-bwand l r)]
-      [(bwor* l r) (binexp eval-bwor l r)]
-      [(shl* l r) (binexp eval-shl l r)]
-      [(shr* l r) (binexp eval-shr l r)]
+      [(bwnot* e) (unexp bvnot e)]
+      [(add* l r) (binexp bvadd l r)]
+      [(bwand* l r) (binexp bvand l r)]
+      [(bwor* l r) (binexp bvor l r)]
+      [(bwxor* l r) (binexp bvxor l r)]
+      [(shl* l r) (binexp bvshl l r)]
+      [(shr* l r) (binexp bvlshr l r)]
       [(read* p) (unexp bool->byte p)]
       ['false false-byte]
       ['true true-byte]

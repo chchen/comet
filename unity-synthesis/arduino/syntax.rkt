@@ -17,10 +17,13 @@
 (struct eq* (left right) #:transparent)
 
 ;; Traditional "Byte/Bitwise" Expressions
+;; Byte -> Byte
+(struct bwnot* (left) #:transparent)
 ;; Byte -> Byte -> Byte
 (struct add* (left right) #:transparent)
 (struct bwand* (left right) #:transparent)
 (struct bwor* (left right) #:transparent)
+(struct bwxor* (left right) #:transparent)
 (struct shl* (byte shift-by) #:transparent)
 (struct shr* (byte shift-by) #:transparent)
 
@@ -117,9 +120,11 @@
          or*
          lt*
          eq*
+         bwnot*
          add*
          bwand*
          bwor*
+         bwxor*
          shl*
          shr*
          read*
