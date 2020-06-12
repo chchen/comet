@@ -11,12 +11,6 @@
          (prefix-in unity: "../unity/semantics.rkt")
          (prefix-in unity: "../unity/syntax.rkt"))
 
-;; Synthesize snippets related to channels!
-;; empty channels?
-;; full channels?
-;; full? (done)
-;; empty? (done)
-
 ;; construct a list of arduino expressions that correspond to the
 ;; channel predicates full?* and empty?* over the channels declared
 ;; in the UNITY context
@@ -32,9 +26,7 @@
      (let* ([arduino-cxt (synth-map-arduino-context synthesis-map)]
             [arduino-st->unity-st (synth-map-arduino-state->unity-state synthesis-map)]
             [arduino-st (synth-map-arduino-symbolic-state synthesis-map)]
-            [unity-stobj (unity:stobj (arduino-st->unity-st arduino-st))]
-            [unity-recv-channels (type-in-context 'recv-channel unity-cxt)]
-            [unity-send-channels (type-in-context 'send-channel unity-cxt)])
+            [unity-stobj (unity:stobj (arduino-st->unity-st arduino-st))])
 
             (define (try-synth exp-depth predicate channel-id)
               (let* ([start-time (current-seconds)]
@@ -44,22 +36,26 @@
                      [unity-expr (apply predicate (list channel-id))]
                      [arduino-val (evaluate-expr sketch arduino-cxt arduino-st)]
                      [unity-val (unity:evaluate-expr unity-expr unity-cxt unity-stobj)]
-                     [unity-val-boolean? (boolean? unity-val)]
                      [eval-eq? (eq? (bitvector->bool arduino-val)
                                     unity-val)]
                      [model (synthesize
                                #:forall arduino-st
-                               #:assume (assert unity-val-boolean?)
+                               #:assume (assert (boolean? unity-val))
                                #:guarantee (assert eval-eq?))])
                 (begin
-                  (display (format "try-synth expr ~a ~a in ~a sec.~n"
-                                   unity-expr exp-depth (- (current-seconds) start-time))
+                  (display (format "[channel-predicates] ~a ~a sec. depth: ~a ~a~n"
+                                   (sat? model)
+                                   (- (current-seconds) start-time)
+                                   exp-depth
+                                   unity-expr)
                            (current-error-port))
                   (if (sat? model)
                       (evaluate sketch model)
                       (if (>= exp-depth max-expression-depth)
-                          (format "synthesis failure for expr ~a" unity-expr)
-                          (try-synth (add1 exp-depth) predicate channel-id))))))
+                          model
+                          (try-synth (add1 exp-depth)
+                                     predicate
+                                     channel-id))))))
 
             (define (recv-full channel-id)
               (try-synth 0 unity:full?* channel-id))
@@ -67,7 +63,9 @@
             (define (send-empty channel-id)
               (try-synth 0 unity:empty?* channel-id))
 
-            (append (map recv-full unity-recv-channels)
-                    (map send-empty unity-send-channels)))]))
+            (let ([unity-recv-channels (type-in-context 'recv-channel unity-cxt)]
+                  [unity-send-channels (type-in-context 'send-channel unity-cxt)])
+              (append (map recv-full unity-recv-channels)
+                      (map send-empty unity-send-channels))))]))
 
 (provide channel-predicates)

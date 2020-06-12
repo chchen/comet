@@ -1,6 +1,7 @@
 #lang rosette
 
 (require "arduino/synth.rkt"
+         "arduino/symbolic.rkt"
          "unity/syntax.rkt")
 
 (define boolean-test
@@ -126,12 +127,13 @@
           (cons 'i 'recv-channel)
           (cons 'o 'send-channel)))
    (initially*
-    (:=* (list 'b 'n 'r 's 'o)
-         (list #f
-               42
-               (empty-recv-buf* 8)
-               (nat->send-buf* 8 42)
-               'empty)))
+    (list
+     (:=* (list 'b 'n 'r 's 'o)
+          (list #f
+                42
+                (empty-recv-buf* 8)
+                (nat->send-buf* 8 42)
+                (message* #t)))))
    (assign*
     '())))
 
@@ -204,4 +206,4 @@
 ;;         [verify-model (verify-loop prog sketch synth-map)])
 ;;    verify-model))
 
-(unity-prog->arduino-prog channel-test)
+(unity-prog->arduino-prog recv-buf-test)

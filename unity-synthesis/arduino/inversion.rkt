@@ -150,12 +150,20 @@
               '()))
       '()))
 
+(define (stmts?? len stmts)
+  (if (positive? len)
+      (cons (apply choose* stmts)
+            (stmts?? (sub1 len)
+                     stmts))
+      '()))
+
 (provide type-in-context
          state??
          exp??
          context-stmt??
          context-stmts??
-         cond-stmts??)
+         cond-stmts??
+         stmts??)
 
 ;; (define (sym-count u)
 ;;   (length (symbolics u)))
