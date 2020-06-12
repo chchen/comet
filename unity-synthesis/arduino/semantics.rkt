@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "environment.rkt"
+(require "bitvector.rkt"
+         "environment.rkt"
          "syntax.rkt"
          "../util.rkt"
          rosette/lib/angelic
@@ -12,49 +13,6 @@
     ['pin-in #t]
     ['pin-out #t]
     [_ #f]))
-
-(define (true-byte? b)
-  (not (bveq b false-byte)))
-
-(define (false-byte? b)
-  (bveq b false-byte))
-
-(define (byte->bool b)
-  (if (false-byte? b)
-      #f
-      #t))
-
-(define (bool->byte b)
-  (if b
-      true-byte
-      false-byte))
-
-(define (eval-not e)
-  (if (false-byte? e)
-      true-byte
-      false-byte))
-
-(define (eval-and l r)
-  (if (and (true-byte? l)
-           (true-byte? r))
-      true-byte
-      false-byte))
-
-(define (eval-or l r)
-  (if (or (true-byte? l)
-          (true-byte? r))
-      true-byte
-      false-byte))
-
-(define (eval-lt l r)
-  (if (bvult l r)
-      true-byte
-      false-byte))
-
-(define (eval-eq l r)
-  (if (bveq l r)
-      true-byte
-      false-byte))
 
 ;; Evaluate
 (define (evaluate-expr expression context state)
@@ -69,11 +27,11 @@
 
   (define (eval-helper expr)
     (match expr
-      [(not* e) (unexp eval-not e)]
-      [(and* l r) (binexp eval-and l r)]
-      [(or* l r) (binexp eval-or l r)]
-      [(lt* l r) (binexp eval-lt l r)]
-      [(eq* l r) (binexp eval-eq l r)]
+      [(not* e) (unexp bvlnot e)]
+      [(and* l r) (binexp bvland l r)]
+      [(or* l r) (binexp bvlor l r)]
+      [(lt* l r) (binexp bvlult l r)]
+      [(eq* l r) (binexp bvleq l r)]
       [(bwnot* e) (unexp bvnot e)]
       [(add* l r) (binexp bvadd l r)]
       [(bwand* l r) (binexp bvand l r)]
@@ -81,12 +39,12 @@
       [(bwxor* l r) (binexp bvxor l r)]
       [(shl* l r) (binexp bvshl l r)]
       [(shr* l r) (binexp bvlshr l r)]
-      [(read* p) (unexp bool->byte p)]
-      ['false false-byte]
-      ['true true-byte]
-      ['LOW false-byte]
-      ['HIGH true-byte]
-      [v (if (byte*? v)
+      [(read* p) (unexp bool->word p)]
+      ['false false-word]
+      ['true true-word]
+      ['LOW false-word]
+      ['HIGH true-word]
+      [v (if (word? v)
              v
              (get-mapping v state))]))
 
@@ -106,43 +64,28 @@
                         (add-mapping pin
                                      (case mode
                                        ['INPUT 'pin-in]
-                                       ['OUTPUT 'pin-out]
-                                       [else 'bad-pinmode])
+                                       ['OUTPUT 'pin-out])
                                      context)
                         state)]
        [(write* pin expr)
-        (let ([typ (get-mapping pin context)]
-              [val (evaluate-expr expr context state)])
-          (if (and (eq? typ 'pin-out)
-                   (byte*? val))
-              (interpret-stmt tail
-                              context
-                              (add-mapping pin (byte->bool val) state))
-              'bad-write))]
+        (let ([val (evaluate-expr expr context state)])
+          (interpret-stmt tail
+                          context
+                          (add-mapping pin (bitvector->bool val) state)))]
        [(:=* var expr)
-        (let ([typ (get-mapping var context)]
-              [val (evaluate-expr expr context state)])
-          (if (and (eq? typ 'byte)
-                   (byte*? val))
-              (interpret-stmt tail
-                              context
-                              (add-mapping var val state))
-              'bad-assign))]
+        (let ([val (evaluate-expr expr context state)])
+          (interpret-stmt tail
+                          context
+                          (add-mapping var val state)))]
        [(if* test left right)
-        (let ([tval (evaluate-expr test context state)])
-          (if (byte*? tval)
-              (let* ([branch-to-take (if (true-byte? tval) left right)]
-                     [taken-env (interpret-stmt branch-to-take context state)]
-                     [taken-cxt (environment*-context taken-env)]
-                     [taken-st (environment*-state taken-env)])
-                (interpret-stmt tail taken-cxt taken-st))
-              'bad-if))])]))
+        (let ([test-val (evaluate-expr test context state)])
+          (let* ([branch-to-take (if (bitvector->bool test-val) left right)]
+                 [taken-env (interpret-stmt branch-to-take context state)]
+                 [taken-cxt (environment*-context taken-env)]
+                 [taken-st (environment*-state taken-env)])
+            (interpret-stmt tail taken-cxt taken-st)))])]))
 
-(provide true-byte?
-         false-byte?
-         byte->bool
-         bool->byte
-         evaluate-expr
+(provide evaluate-expr
          interpret-stmt)
 
 ;; Tests
@@ -156,8 +99,8 @@
       [state (list (cons 'a A)
                    (cons 'b B)
                    (cons 'c (bv 1 8))
-                   (cons 'd0 (byte->bool A))
-                   (cons 'd1 (byte->bool B)))])
+                   (cons 'd0 (bitvector->bool A))
+                   (cons 'd1 (bitvector->bool B)))])
   (assert
    (unsat?
     (verify
@@ -177,12 +120,12 @@
                               context
                               state)
                (bv 255 8))
-       (byte*? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
-                              context
-                              state))
-       (byte*? (evaluate-expr (read* 'd0)
-                              context
-                              state))))))))
+       (word? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
+                             context
+                             state))
+       (word? (evaluate-expr (read* 'd0)
+                             context
+                             state))))))))
 
 (let* ([init-env
         (interpret-stmt (list (byte* 'x)
@@ -215,13 +158,13 @@
                          (cons 'x 'byte))
                    init-cxt)
            (equal? (list (cons 'd1 #t)
-                         (cons 'x false-byte))
+                         (cons 'x false-word))
                    init-st)
            (equal? (get-mapping 'd1 if-st)
-                   (if (true-byte? A)
+                   (if (bitvector->bool A)
                        #t
                        #f))
            (equal? (get-mapping 'x if-st)
-                   true-byte)
+                   true-word)
            (equal? if-cxt
                    init-cxt)))))))

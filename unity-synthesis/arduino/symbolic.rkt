@@ -1,13 +1,13 @@
 #lang rosette/safe
 
 (require "../util.rkt"
+         "bitvector.rkt"
          "environment.rkt"
          "semantics.rkt"
          "syntax.rkt"
          (prefix-in unity: "../unity/environment.rkt")
          (prefix-in unity: "../unity/semantics.rkt")
          (prefix-in unity: "../unity/syntax.rkt")
-         "inversion.rkt"
          rosette/lib/angelic
          rosette/lib/synthax
          rosette/lib/match
@@ -19,7 +19,9 @@
    unity-internal-vars
    arduino-context
    arduino-symbolic-state
-   arduino-state->unity-state)
+   arduino-state->unity-state
+   unity-id->arduino-state->unity-val
+   unity-id->arduino-ids)
   #:transparent)
 
 (struct synth-traces
@@ -32,8 +34,13 @@
    trace)
   #:transparent)
 
+(struct guarded-stmt
+  (guard
+   stmt)
+  #:transparent)
+
 (define max-expression-depth
-  5)
+  4)
 
 (define max-pin-id
   21)
@@ -44,7 +51,7 @@
     b)
 
   (define (symbolic-byte)
-    (define-symbolic* b (bitvector 8))
+    (define-symbolic* b word?)
     b)
 
   (define (helper cxt)
@@ -92,6 +99,10 @@
   ;; map: symbol to f: arduino_state -> unity_state ->
   ;; arduino_state ->
   ;; unity_state
+
+  ;; (f: symbol -> (fn: arduino_state -> unity_val))
+  ;; -> arduino_state
+  ;; -> unity_state
   (define (state-mapper state-map state)
     (match state-map
       ['() '()]
@@ -99,21 +110,35 @@
        (cons (cons id (fn state))
              (state-mapper tail state))]))
 
-  (define (helper working-unity-cxt arduino-cxt state-map current-pin)
+  ;; (f: symbol -> (fn: arduino_state -> unity_val))
+  ;; -> unity_id
+  ;; -> arduino_state
+  ;; -> unity_val
+  (define (state-id-mapper state-map id state)
+    (let ([id-fn (get-mapping id state-map)])
+      (if (null? id-fn)
+          '()
+          (id-fn state))))
+
+  (define (helper working-unity-cxt arduino-cxt state-map inv-map current-pin)
     (match working-unity-cxt
       ['() (synth-map (unity:context->external-vars unity-context)
                       (unity:context->internal-vars unity-context)
                       arduino-cxt
                       (symbolic-state arduino-cxt)
-                      (lambda (st) (state-mapper state-map st)))]
+                      (lambda (st) (state-mapper state-map st))
+                      (lambda (id st) (state-id-mapper state-map id st))
+                      (lambda (id) (get-mapping id inv-map)))]
       [(cons (cons id 'boolean) tail)
        (helper tail
                (cons (cons id 'byte)
                      arduino-cxt)
                (cons (cons id
                            (lambda (st)
-                             (true-byte? (get-mapping id st))))
+                             (bitvector->bool (get-mapping id st))))
                      state-map)
+               (cons (cons id (list id))
+                     inv-map)
                current-pin)]
       [(cons (cons id 'natural) tail)
        (helper tail
@@ -123,6 +148,8 @@
                            (lambda (st)
                              (bitvector->natural (get-mapping id st))))
                      state-map)
+               (cons (cons id (list id))
+                     inv-map)
                current-pin)]
       [(cons (cons id 'recv-channel) tail)
        (let* ([req-pin current-pin]
@@ -145,6 +172,8 @@
                                      (unity:channel* #t val-v)
                                      (unity:channel* #f null)))))
                        state-map)
+                 (cons (cons id (list req-id ack-id val-id))
+                       inv-map)
                  (next-pin-id val-pin)))]
       [(cons (cons id 'send-channel) tail)
        (let* ([req-pin current-pin]
@@ -167,6 +196,8 @@
                                      (unity:channel* #t val-v)
                                      (unity:channel* #f null)))))
                        state-map)
+                 (cons (cons id (list req-id ack-id val-id))
+                       inv-map)
                  (next-pin-id val-pin)))]
       [(cons (cons id 'recv-buf) tail)
        (let ([rcvd-id (symbol-format "~a_rcvd" id)]
@@ -183,6 +214,8 @@
                                                 (map bitvector->bool
                                                      (bitvector->bits vals-val))))))
                        state-map)
+                 (cons (cons id (list rcvd-id vals-id))
+                       inv-map)
                  current-pin))]
       [(cons (cons id 'send-buf) tail)
        (let ([sent-id (symbol-format "~a_sent" id)]
@@ -199,9 +232,11 @@
                                                 (map bitvector->bool
                                                      (bitvector->bits vals-val))))))
                        state-map)
+                 (cons (cons id (list sent-id vals-id))
+                       inv-map)
                  current-pin))]))
 
-  (helper unity-context '() '() 0))
+  (helper unity-context '() '() '() 0))
 
 (define (unity-prog->synth-map unity-prog)
   (match unity-prog
@@ -212,21 +247,6 @@
      (unity-context->synth-map unity-cxt)]))
 
 (define (unity-prog->synth-traces unity-prog synthesis-map)
-  (define (symbolic-pair->guarded-trace p)
-    (let ([guard (car p)]
-          [stobj (cdr p)])
-      (if (null? stobj)
-          '()
-          (guarded-trace guard
-                         (unity:stobj-state stobj)))))
-
-  (define (stobj->guarded-traces stobj)
-    (if (union? stobj)
-        (flatten
-         (map symbolic-pair->guarded-trace
-              (union-contents stobj)))
-        (symbolic-pair->guarded-trace (cons #t stobj))))
-
   (match unity-prog
     [(unity:unity*
       (unity:declare* unity-cxt)
@@ -240,17 +260,58 @@
             [unity-start-st (arduino-st->unity-st arduino-start-st)]
             [unity-start-stobj (unity:stobj unity-start-st)]
             [unity-start-env (unity:interpret-declare unity-prog unity-start-stobj)]
-            [unity-initialized-env (unity:interpret-initially
-                                    unity-prog
-                                    unity-start-env)]
-            [unity-assigned-env (unity:interpret-assign
-                                 unity-prog
-                                 unity-start-env)])
+            [unity-initialized-env (unity:interpret-initially unity-prog unity-start-env)]
+            [unity-assigned-env (unity:interpret-assign unity-prog unity-start-env)])
+
+       (define (symbolic-pair->guarded-trace p)
+         (let* ([guard (car p)]
+                [stobj (cdr p)]
+                [state (unity:stobj-state stobj)])
+           (if (eq? state unity-start-st)
+               '()
+               (guarded-trace guard state))))
+
+       (define (stobj->guarded-traces stobj)
+         (if (union? stobj)
+             (flatten
+              (map symbolic-pair->guarded-trace
+                   (union-contents stobj)))
+             (symbolic-pair->guarded-trace (cons #t stobj))))
+
        (synth-traces (stobj->guarded-traces
                       (unity:environment*-stobj unity-initialized-env))
                      (stobj->guarded-traces
                       (unity:environment*-stobj unity-assigned-env))))]))
 
+(define (unity-prog->assign-state unity-prog synthesis-map)
+  (match unity-prog
+    [(unity:unity*
+      (unity:declare* unity-cxt)
+      initially
+      assign)
+     (let* ([arduino-st->unity-st (synth-map-arduino-state->unity-state synthesis-map)]
+            [arduino-start-st (synth-map-arduino-symbolic-state synthesis-map)]
+            [unity-start-st (arduino-st->unity-st arduino-start-st)]
+            [unity-start-stobj (unity:stobj unity-start-st)]
+            [unity-start-env (unity:interpret-declare unity-prog unity-start-stobj)]
+            [unity-assigned-env (unity:interpret-assign unity-prog unity-start-env)])
+       (unity:stobj-state
+        (unity:environment*-stobj unity-assigned-env)))]))
+
+(define (unity-prog->initially-state unity-prog synthesis-map)
+  (match unity-prog
+    [(unity:unity*
+      (unity:declare* unity-cxt)
+      initially
+      assign)
+     (let* ([arduino-st->unity-st (synth-map-arduino-state->unity-state synthesis-map)]
+            [arduino-start-st (synth-map-arduino-symbolic-state synthesis-map)]
+            [unity-start-st (arduino-st->unity-st arduino-start-st)]
+            [unity-start-stobj (unity:stobj unity-start-st)]
+            [unity-start-env (unity:interpret-declare unity-prog unity-start-stobj)]
+            [unity-initialized-env (unity:interpret-initially unity-prog unity-start-env)])
+       (unity:stobj-state
+        (unity:environment*-stobj unity-initialized-env)))]))
 
 ;; Ensures a monotonic transition for each key-value
 ;;
@@ -297,8 +358,7 @@
         (eq? (foldl monotonic-ok? 'post trace)
              'pre)))
 
-    (map key-transition-ok?
-         keys)))
+    (andmap key-transition-ok? keys)))
 
 (provide max-expression-depth
          max-pin-id
@@ -308,12 +368,21 @@
          synth-map-arduino-context
          synth-map-arduino-symbolic-state
          synth-map-arduino-state->unity-state
+         synth-map-unity-id->arduino-state->unity-val
+         synth-map-unity-id->arduino-ids
          synth-traces
          synth-traces-initially
          synth-traces-assign
          guarded-trace
+         guarded-trace?
          guarded-trace-guard
          guarded-trace-trace
+         guarded-stmt
+         guarded-stmt?
+         guarded-stmt-guard
+         guarded-stmt-stmt
          unity-prog->synth-map
          unity-prog->synth-traces
+         unity-prog->assign-state
+         unity-prog->initially-state
          monotonic-pre-to-post?)

@@ -38,22 +38,19 @@
 
             (define (try-synth exp-depth predicate channel-id)
               (let* ([start-time (current-seconds)]
-                     [sketch (exp?? exp-depth arduino-cxt '())]
+                     [sketch (begin
+                               (clear-asserts!)
+                               (exp?? exp-depth arduino-cxt '()))]
                      [unity-expr (apply predicate (list channel-id))]
                      [arduino-val (evaluate-expr sketch arduino-cxt arduino-st)]
                      [unity-val (unity:evaluate-expr unity-expr unity-cxt unity-stobj)]
                      [unity-val-boolean? (boolean? unity-val)]
-                     [eval-eq? (eq? (byte->bool arduino-val)
+                     [eval-eq? (eq? (bitvector->bool arduino-val)
                                     unity-val)]
-                     [model (begin
-                              (clear-asserts!)
-                              (synthesize
-                               #:forall
-                               arduino-st
-                               #:assume
-                               (assert unity-val-boolean?)
-                               #:guarantee
-                               (assert eval-eq?)))])
+                     [model (synthesize
+                               #:forall arduino-st
+                               #:assume (assert unity-val-boolean?)
+                               #:guarantee (assert eval-eq?))])
                 (begin
                   (display (format "try-synth expr ~a ~a in ~a sec.~n"
                                    unity-expr exp-depth (- (current-seconds) start-time))

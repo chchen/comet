@@ -1,9 +1,13 @@
 #lang rosette/safe
 
-(require "environment.rkt"
+(require "../util.rkt"
+         "bitvector.rkt"
+         "environment.rkt"
          "semantics.rkt"
+         "symbolic.rkt"
          "syntax.rkt"
          rosette/lib/angelic
+         rosette/lib/match
          rosette/lib/synthax)
 
 ;; type:Symbol -> cxt:List -> List[id:Symbol]
@@ -16,9 +20,54 @@
                cxt)))
 
 (define literals
-  (list 'true
-        'false
-        (?? byte*?)))
+  (list (?? word?)))
+
+(define unops
+  (list bvlnot
+        bvnot))
+
+(define binops
+  (list bvland
+        bvlor
+        bvlult
+        bvleq
+        bvadd
+        bvand
+        bvor
+        bvxor
+        bvshl
+        bvlshr))
+
+(define (word-exp?? depth vals)
+  (let ([terminals (apply choose* (cons (?? word?) vals))])
+    (if (positive? depth)
+        (let ([l-expr (word-exp?? (sub1 depth) vals)])
+          (choose* terminals
+                   ((apply choose* unops) l-expr)
+                   ((apply choose* binops) l-expr
+                                           (word-exp?? (sub1 depth) vals))))
+          terminals)))
+
+(define (state?? l-vals expr-depth cxt state)
+  (let* ([bool-ids (type-in-context 'pin-out cxt)]
+         [word-ids (type-in-context 'byte cxt)]
+         [state-values (map (lambda (st)
+                              (cond
+                                [(word? st) st]
+                                [(boolean? st) (bool->word st)]))
+                            (map cdr state))])
+    (match l-vals
+      ['() state]
+      [(cons id tail)
+       (let* ([id-typ (get-mapping id cxt)])
+         (if (eq? id-typ 'pin-in)
+             (state?? tail expr-depth cxt state)
+             (let* ([hole (word-exp?? expr-depth state-values)]
+                    [expr (match id-typ
+                            ['byte hole]
+                            ['pin-out (bitvector->bool hole)])])
+               (cons (cons id expr)
+                     (state?? tail expr-depth cxt state)))))])))
 
 ;; Inversion over expressions
 ;; Nat -> Context -> Choose Tree
@@ -31,23 +80,26 @@
                             literals
                             extra-exps)])
     (if (positive? depth)
-        (apply choose* (append
-                        (list ((choose* not*
-                                        bwnot*)
-                               (exp?? (sub1 depth) cxt extra-exps))
-                              ((choose* and*
-                                        or*
-                                        lt*
-                                        eq*
-                                        add*
-                                        bwand*
-                                        bwor*
-                                        bwxor*
-                                        shl*
-                                        shr*)
-                               (exp?? (sub1 depth) cxt extra-exps)
-                               (exp?? (sub1 depth) cxt extra-exps)))
-                        terminals))
+        (let ([left (exp?? (sub1 depth) cxt extra-exps)]
+              [right (exp?? (sub1 depth) cxt extra-exps)])
+          (apply choose*
+                 (append
+                  (list ((choose* not*
+                                  bwnot*)
+                         left)
+                        ((choose* and*
+                                  or*
+                                  lt*
+                                  eq*
+                                  add*
+                                  bwand*
+                                  bwor*
+                                  bwxor*
+                                  shl*
+                                  shr*)
+                         left
+                         right))
+                  terminals)))
         (apply choose* terminals))))
 
 ;; Single, "context-altering" statements
@@ -73,24 +125,6 @@
                                v-terms)])
     (apply choose* choose-terms)))
 
-;; Single, "state-changing" statements
-;; variable/pin assignment
-;; Nat -> Context -> Choose Tree
-(define (state-stmt?? exp-depth cxt extra-exps)
-  (let* ([outputs (type-in-context 'pin-out cxt)]
-         [vars (type-in-context 'byte cxt)]
-         [o-terms (if (pair? outputs)
-                      (list (write* (apply choose* outputs)
-                                    (exp?? exp-depth cxt extra-exps)))
-                      '())]
-         [v-terms (if (pair? vars)
-                      (list (:=* (apply choose* vars)
-                                 (exp?? exp-depth cxt extra-exps)))
-                      '())]
-         [choose-terms (append o-terms
-                               v-terms)])
-    (apply choose* choose-terms)))
-
 ;; Sequence of unconditional context-altering statements
 ;; Nat -> Nat -> Context -> Choose Tree
 (define (context-stmts?? stmt-depth cxt)
@@ -100,37 +134,27 @@
                              cxt))
       '()))
 
-;; Sequence of unconditional state-altering statements
-;; Nat -> Nat -> Context -> Choose Tree
-(define (state-stmts?? stmt-depth exp-depth cxt extra-exps)
-  (if (positive? stmt-depth)
-      (cons (state-stmt?? exp-depth cxt extra-exps)
-            (state-stmts?? (sub1 stmt-depth)
-                           exp-depth
-                           cxt
-                           extra-exps))
-      '()))
-
 ;; Sequence of conditional statements. Think of the
 ;; conditional expressions on one line, with unconditional
 ;; statements of length stmt-depth hung on each
-;; Nat -> Expressions -> Statements -> Choose Tree
-(define (cond-stmts?? cond-depth exps stmts)
+;; Nat -> Guarded-stmts -> Choose Tree
+(define (cond-stmts?? cond-depth guarded-stmts)
   (if (positive? cond-depth)
-      (cons (if* (apply choose* exps)
-                 (apply choose* stmts)
-                 (cond-stmts?? (sub1 cond-depth)
-                               exps
-                               stmts))
-            '())
+      (let* ([pick (apply choose* guarded-stmts)]
+             [guard (guarded-stmt-guard pick)]
+             [stmts (guarded-stmt-stmt pick)])
+        (cons (if* guard
+                   stmts
+                   (cond-stmts?? (sub1 cond-depth)
+                                 guarded-stmts))
+              '()))
       '()))
 
 (provide type-in-context
+         state??
          exp??
          context-stmt??
-         state-stmt??
          context-stmts??
-         state-stmts??
          cond-stmts??)
 
 ;; (define (sym-count u)

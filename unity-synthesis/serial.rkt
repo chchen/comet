@@ -1,16 +1,7 @@
 #lang rosette
 
-(require "arduino/buffer.rkt"
-         "arduino/channel.rkt"
-         "arduino/inversion.rkt"
-         "arduino/semantics.rkt"
-         "arduino/symbolic.rkt"
-         "arduino/synth.rkt"
-         "unity/syntax.rkt"
-         (prefix-in arduino: "arduino/environment.rkt")
-         (prefix-in arduino: "arduino/syntax.rkt")
-         (prefix-in unity: "unity/environment.rkt")
-         (prefix-in unity: "unity/semantics.rkt"))
+(require "arduino/synth.rkt"
+         "unity/syntax.rkt")
 
 (define boolean-test
   (unity*
@@ -70,27 +61,6 @@
                               (and* 'in-read
                                     (full?* 'in)))))))))))
 
-(define channel-sketch
-  (list
-   (arduino:if*
-    (arduino:and* (arduino:not* 'in-read)
-                  (arduino:and* (arduino:eq* (arduino:read* 'd4)
-                                             (arduino:read* 'd3))
-                                (arduino:not* (arduino:eq* (arduino:read* 'd0)
-                                                           (arduino:read* 'd1)))))
-    (list
-     (arduino::=* 'in-read 'true)
-     (arduino:write* 'd5 (arduino:read* 'd2))
-     (arduino:write* 'd3 (arduino:not* (arduino:read* 'd4))))
-    (list
-     (arduino:if*
-      (arduino:and* 'in-read
-                    (arduino:not* (arduino:eq* (arduino:read* 'd0) (arduino:read* 'd1))))
-      (list
-       (arduino::=* 'in-read 'false)
-       (arduino:write* 'd1 (arduino:read* 'd0)))
-      '())))))
-
 (define recv-buf-test
   (unity*
    (declare*
@@ -109,28 +79,6 @@
            (case*
             (list (cons (list (recv-buf-put* 'r 'x))
                         (not* (recv-buf-full?* 'r)))))))))))
-
-(define recv-buf-sketch
-  (list
-   (arduino:if*
-    (arduino:not* (arduino:lt* (bv #x07 8) 'r_rcvd))
-    (list
-     (arduino::=*
-      'r_vals
-      (arduino:bwor*
-       (arduino:bwand*
-        'r_vals
-        (arduino:bwnot*
-         (arduino:shl*
-          (bv 1 8)
-          'r_rcvd)))
-       (arduino:shl*
-        (arduino:and*
-         'x
-         'x)
-        'r_rcvd)))
-     (arduino::=* 'r_rcvd (arduino:add* 'r_rcvd (bv 1 8))))
-    '())))
 
 (define send-buf-test
   (unity*
@@ -256,37 +204,4 @@
 ;;         [verify-model (verify-loop prog sketch synth-map)])
 ;;    verify-model))
 
-(time
- (let* ([prog recv-buf-test]
-        [synth-map (unity-prog->synth-map prog)]
-        [synth-tr (unity-prog->synth-traces prog synth-map)]
-        [buffer-preds (buffer-predicates prog synth-map)]
-        [channel-preds (channel-predicates prog synth-map)]
-        [preds (append buffer-preds
-                       channel-preds)]
-        [initially-guarded-traces (synth-traces-initially synth-tr)]
-        [assign-guarded-traces (synth-traces-assign synth-tr)]
-        [setup-stmts (try-synth-trace initially-guarded-traces
-                                      synth-map
-                                      #f
-                                      '())]
-        [guard-exps (map
-                     (lambda (guarded-tr)
-                       (try-synth-guard guarded-tr
-                                        synth-map
-                                        preds))
-                     assign-guarded-traces)]
-        [assign-stmts (map
-                       (lambda (guarded-tr)
-                         (try-synth-trace guarded-tr
-                                          synth-map
-                                          #t
-                                          buffer-preds))
-                       assign-guarded-traces)])
- (list setup-stmts
-       guard-exps
-       assign-stmts)))
-;;    ;; (try-synth-loop prog
-;;    ;;                 synth-map
-;;    ;;                 guard-exps
-;;    ;;                 assign-stmts)))
+(unity-prog->arduino-prog channel-test)
