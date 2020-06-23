@@ -78,20 +78,23 @@
     [(buffer* rcvd vals)
      (>= rcvd (length vals))]))
 
+;; Stores a natural number as a new send-buffer
+;; Number is stored as a little-endian list of booleans
 (define (eval-nat->send-buf len val)
   (let ([bools (map bitvector->bool
-                        (bitvector->bits
-                         (bv val len)))])
+                    (bitvector->bits
+                     (integer->bitvector val word?)))])
     (buffer* 0 bools)))
 
-;; Get the value at the cursor
-;; 0 - least significant/first element
-;; max - most significant/last element
+;; Retrieves the "next" boolean from a send-buffer
+;; Buffer data is stored as a little-endian list of booleans
 (define (eval-send-buf-get buf)
   (match buf
     [(buffer* sent vals)
      (list-ref vals sent)]))
 
+;; Increment cursor for send-buffer
+;; Resultant cursor increments one significant place
 (define (eval-send-buf-next buf)
   (match buf
     [(buffer* sent vals)
@@ -99,8 +102,7 @@
 
 (define (eval-empty-recv-buf len)
   (let ([bools (map bitvector->bool
-                    (bitvector->bits
-                     (bv 0 len)))])
+                    (bitvector->bits false-word))])
     (buffer* 0 bools)))
 
 ;; Buffer is a "little endian" list of values
@@ -121,11 +123,15 @@
     [(buffer* rcvd vals)
      (buffer* (add1 rcvd) (insert-list rcvd item vals))]))
 
+;; Transforms a full recv-buffer into a natural number
+;; Note that 'concat' works on "big endian" lists
+;; so we must reverse the incoming list of bitbectors
 (define (eval-recv-buf->nat buf)
   (match buf
     [(buffer* rcvd vals)
      (bitvector->natural
-      (concat vals))]))
+      (apply concat
+             (reverse (map bool->bitvector vals))))]))
 
 ;; Evaluate an expression. Takes an expression, context, and a state
 (define (evaluate-expr expression context state-object)
@@ -308,14 +314,11 @@
         (environment*? env3))))
 
 ;; Assert that send-buf and recv-buf conversions work
-;; for all positive word sizes
 
-(define-symbolic W N integer?)
-(define-symbolic X Y boolean?)
-
+(current-bitwidth 8)
+(define-symbolic N integer?)
 (define (transfer-buf from to)
-  (if (or (eval-send-buf-empty? from)
-          (eval-recv-buf-full? to))
+  (if (eval-send-buf-empty? from)
       to
       (transfer-buf
        (eval-send-buf-next from)
@@ -324,17 +327,13 @@
 
 (assert
  (unsat?
-  (verify
-   #:assume
-   (assert
-    (and (< 0 W)
-         (<= 0 N)
-         (< N (expt 2 W))))
-   #:guarantee
-   (assert
-    (let* ([word-size W]
-           [send-buffer (eval-nat->send-buf word-size N)]
-           [empty-recv-buf (eval-empty-recv-buf word-size)]
-           [recv-buffer (transfer-buf send-buffer empty-recv-buf)]
-           [recv-nat (eval-recv-buf->nat recv-buffer)])
-      (eq? N recv-nat))))))
+  (let* ([word-size 8]
+         [send-buffer (eval-nat->send-buf word-size N)]
+         [empty-recv-buf (eval-empty-recv-buf word-size)]
+         [recv-buffer (transfer-buf send-buffer empty-recv-buf)]
+         [recv-nat (eval-recv-buf->nat recv-buffer)])
+    (verify
+     #:assume (assert
+               (and (<= 0 N)
+                    (< N (expt 2 word-size))))
+     #:guarantee (assert (= N recv-nat))))))
