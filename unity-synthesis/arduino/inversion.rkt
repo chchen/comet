@@ -19,9 +19,6 @@
                       (cdr pair)))
                cxt)))
 
-(define literals
-  (list (?? word?)))
-
 (define unops
   (list bvlnot
         bvnot))
@@ -41,12 +38,11 @@
 (define (word-exp?? depth vals)
   (let ([terminals (apply choose* (cons (?? word?) vals))])
     (if (positive? depth)
-        (let ([l-expr (word-exp?? (sub1 depth) vals)])
-          (choose* terminals
-                   ((apply choose* unops) l-expr)
-                   ((apply choose* binops) l-expr
-                                           (word-exp?? (sub1 depth) vals))))
-          terminals)))
+        (let ([l-expr (word-exp?? (sub1 depth) vals)]
+              [r-expr (word-exp?? (sub1 depth) vals)])
+          ((apply choose* binops) l-expr r-expr))
+        (choose* ((apply choose* unops) terminals)
+                 terminals))))
 
 (define (state?? l-vals expr-depth cxt state)
   (let* ([bool-ids (type-in-context 'pin-out cxt)]
@@ -75,6 +71,7 @@
   (let* ([pins (append (type-in-context 'pin-in cxt)
                        (type-in-context 'pin-out cxt))]
          [vars (type-in-context 'byte cxt)]
+         [literals (list (?? word?))]
          [terminals (append (map read* pins)
                             vars
                             literals
