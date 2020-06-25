@@ -10,8 +10,8 @@
          "syntax.rkt"
          (prefix-in unity: "../unity/environment.rkt")
          (prefix-in unity: "../unity/semantics.rkt")
-         (prefix-in unity: "../unity/syntax.rkt"))
-
+         (prefix-in unity: "../unity/syntax.rkt")
+         rosette/lib/match)
 
 (define (try-synth-expr synth-map guard val snippets)
   (let* ([arduino-cxt (synth-map-arduino-context synth-map)]
@@ -110,45 +110,50 @@
     (map try-synth trace)))
 
 (define (unordered-stmts->ordered-stmts synth-map guard unity-trace unordered-stmts)
-
   (let* ([start-time (current-seconds)]
+         [max-len (length unordered-stmts)]
          [ext-vars (synth-map-unity-external-vars synth-map)]
          [int-vars (synth-map-unity-internal-vars synth-map)]
          [all-vars (append ext-vars int-vars)]
          [arduino-cxt (synth-map-arduino-context synth-map)]
          [arduino-st->unity-st (synth-map-arduino-state->unity-state synth-map)]
          [arduino-st (synth-map-arduino-symbolic-state synth-map)]
-         [unity-st (arduino-st->unity-st arduino-st)]
-         [sketch (begin
-                   (clear-asserts!)
-                   (stmts?? (length unordered-stmts)
-                            unordered-stmts))]
-         [arduino-post-env (interpret-stmt sketch arduino-cxt arduino-st)]
-         [arduino-post-st (environment*-state arduino-post-env)]
-         [foo (begin (display (format "~a~n" arduino-post-st)
-                              (current-error-port)) #t)]
-         [post-st-eq? (map-eq-modulo-keys? all-vars
-                                           (arduino-st->unity-st arduino-post-st)
-                                           unity-trace)]
-         [monotonic? (monotonic-pre-to-post? ext-vars
-                                             arduino-st
-                                             arduino-post-st
-                                             unity-st
-                                             unity-trace
-                                             arduino-st->unity-st)]
-         [model (synthesize
-                 #:forall arduino-st
-                 #:assume (assert guard)
-                 #:guarantee (assert (and post-st-eq? monotonic?)))])
-    (begin
-      (display (format "[unordered-stmts->ordered-stmts] ~a ~a sec. ~a~n"
-                       (sat? model)
-                       (- (current-seconds) start-time)
-                       unordered-stmts)
-               (current-error-port))
-      (if (sat? model)
-          (evaluate sketch model)
-          model))))
+         [unity-st (arduino-st->unity-st arduino-st)])
+
+    (define (try-synth len)
+      (let* ([sketch (begin
+                       (clear-asserts!)
+                       (stmts?? len
+                                unordered-stmts))]
+             [arduino-post-env (interpret-stmt sketch arduino-cxt arduino-st)]
+             [arduino-post-st (environment*-state arduino-post-env)]
+             [post-st-eq? (map-eq-modulo-keys? all-vars
+                                               (arduino-st->unity-st arduino-post-st)
+                                               unity-trace)]
+             [monotonic? (monotonic-pre-to-post? ext-vars
+                                                 arduino-st
+                                                 arduino-post-st
+                                                 unity-st
+                                                 unity-trace
+                                                 arduino-st->unity-st)]
+             [model (synthesize
+                     #:forall arduino-st
+                     #:assume (assert guard)
+                     #:guarantee (assert (and post-st-eq? monotonic?)))])
+        (begin
+          (display (format "[unordered-stmts->ordered-stmts] ~a ~a sec. length: ~a ~a~n"
+                           (sat? model)
+                           (- (current-seconds) start-time)
+                           len
+                           unordered-stmts)
+                   (current-error-port))
+          (if (sat? model)
+              (evaluate sketch model)
+              (if (>= len max-len)
+                  model
+                  (try-synth (add1 len)))))))
+
+    (try-synth 0)))
 
 (define (guarded-stmts->setup synth-map unity-post-st guarded-stmts)
   (let* ([start-time (current-seconds)]
@@ -251,15 +256,12 @@
           (unity-trace->arduino-trace synth-map guard trace)]
          [synth-unordered-stmts
           (arduino-trace->unordered-stmts
-           synth-map guard synth-trace '())]
+           synth-map guard synth-trace snippets)]
          [synth-ordered-stmts
-          (begin
-            (display (format "o-s ~a~n" synth-unordered-stmts)
-                     (current-error-port))
-            (unordered-stmts->ordered-stmts synth-map
-                                            guard
-                                            trace
-                                            synth-unordered-stmts))])
+          (unordered-stmts->ordered-stmts synth-map
+                                          guard
+                                          trace
+                                          synth-unordered-stmts)])
     (guarded-stmt synth-guard
                   synth-ordered-stmts)))
 
