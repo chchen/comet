@@ -83,7 +83,8 @@
 (define (eval-nat->send-buf len val)
   (let ([bools (map bitvector->bool
                     (bitvector->bits
-                     (integer->bitvector val word?)))])
+                     (integer->bitvector val
+                                         (bitvector len))))])
     (buffer* 0 bools)))
 
 ;; Retrieves the "next" boolean from a send-buffer
@@ -101,9 +102,12 @@
      (buffer* (add1 sent) vals)]))
 
 (define (eval-empty-recv-buf len)
-  (let ([bools (map bitvector->bool
-                    (bitvector->bits false-word))])
-    (buffer* 0 bools)))
+  (define (false-list len)
+    (if (zero? len)
+        '()
+        (cons #f (false-list (sub1 len)))))
+
+    (buffer* 0 (false-list len)))
 
 ;; Buffer is a "little endian" list of values
 ;; when cursor is at 0, we insert at the least significant
@@ -113,11 +117,10 @@
   (define (insert-list dist item lst)
     (if (null? lst)
         '()
-        (if (= dist 0)
-            (cons item
-                  (insert-list (sub1 dist) item (cdr lst)))
-            (cons (car lst)
-                  (insert-list (sub1 dist) item (cdr lst))))))
+        (cons (if (zero? dist)
+                  item
+                  (car lst))
+              (insert-list (sub1 dist) item (cdr lst)))))
 
   (match buf
     [(buffer* rcvd vals)
