@@ -62,6 +62,7 @@
 
     (define (try-synth exp-depth unity-id unity-val)
       (let* ([start-time (current-seconds)]
+             [arduino-vals (map cdr arduino-st)]
              [arduino-ids (unity-id->arduino-ids unity-id)]
              [sketch-st (begin
                           (clear-asserts!)
@@ -72,12 +73,13 @@
                      #:assume (assert unity-guard)
                      #:guarantee (assert (eq? mapped-val unity-val)))])
         (begin
-          (display (format "[unity-trace->arduino-trace] ~a ~a sec. depth: ~a ~a -> ~a~n"
+          (display (format "[unity-trace->arduino-trace] ~a ~a sec. depth: ~a uid: ~a ~a -> ~a~n"
                            (sat? model)
                            (- (current-seconds) start-time)
                            exp-depth
-                           arduino-ids
-                           unity-id)
+                           unity-id
+                           (relevant-values unity-val arduino-vals)
+                           arduino-ids)
                    (current-error-port))
           (if (sat? model)
               (trim-trace (evaluate sketch-st model)

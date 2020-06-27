@@ -1,8 +1,12 @@
-#lang rosette
+#lang rosette/safe
 
 (require "arduino/synth.rkt"
          "arduino/symbolic.rkt"
-         "unity/syntax.rkt")
+         "arduino/verify.rkt"
+         "unity/concretize.rkt"
+         "unity/syntax.rkt"
+         rosette/lib/match
+         (prefix-in arduino: "arduino/syntax.rkt"))
 
 (define boolean-test
   (unity*
@@ -81,6 +85,56 @@
             (list (cons (list (recv-buf-put* 'r 'x))
                         (not* (recv-buf-full?* 'r)))))))))))
 
+(define channel-recv-buf-test
+  (unity*
+   (declare*
+    (list (cons 'in 'recv-channel)
+          (cons 'r 'recv-buf)))
+   (initially*
+    (list
+     (:=* (list 'r)
+          (list (empty-recv-buf* 8)))))
+   (assign*
+    (list
+     (list
+      (:=* (list 'r)
+           (case*
+            (list (cons (list (recv-buf-put* 'r (value* 'in)))
+                        (and* (full?* 'in)
+                              (not* (recv-buf-full?* 'r))))))))))))
+
+(define channel-recv-buf-impl
+  (arduino:arduino*
+   (arduino:setup*
+    (list
+     (arduino:pin-mode* 'd2 'INPUT)
+     (arduino:pin-mode* 'd1 'OUTPUT)
+     (arduino:pin-mode* 'd0 'INPUT)
+     (arduino:byte* 'r_vals)
+     (arduino:byte* 'r_rcvd)
+     (arduino::=* 'r_rcvd (bv #x00 8))
+     (arduino::=* 'r_vals (bv #x00 8))))
+   (arduino:loop*
+    (list
+     (arduino:if*
+      (arduino:lt*
+       (arduino:lt* (arduino:bwor* 'r_rcvd (bv #x08 8))
+                    (arduino:add* 'r_rcvd 'r_rcvd))
+       (arduino:bwxor* (arduino:read* 'd0)
+                       (arduino:read* 'd1)))
+      (list (arduino::=* 'r_vals
+                         (arduino:bwxor*
+                          (arduino:bwor* (arduino:shl* (bv #x01 8)
+                                                       'r_rcvd)
+                                         'r_vals)
+                          (arduino:shl* (arduino:lt* (arduino:read* 'd2)
+                                                     (bv #x01 8))
+                                        (arduino:shr* 'r_rcvd
+                                                      (arduino:read* 'd2)))))
+            (arduino::=* 'r_rcvd
+                         (arduino:add* 'r_rcvd (bv #x01 8))))
+      '())))))
+
 (define send-buf-test
   (unity*
    (declare*
@@ -102,6 +156,33 @@
                               (send-buf-get* 's))
                         (not* (send-buf-empty?* 's)))))))))))
 
+(define send-buf-impl
+  (arduino:arduino*
+   (arduino:setup*
+    (list
+     (arduino:byte* 'x)
+     (arduino:byte* 's_vals)
+     (arduino:byte* 's_sent)
+     (arduino::=* 's_vals (bv #x10 8))
+     (arduino::=* 'x (bv #x00 8))
+     (arduino::=* 's_sent (bv #x00 8))))
+   (arduino:loop*
+    (list
+     (arduino:if*
+      (arduino:lt* (arduino:lt* (bv #x87 8) (arduino:bwxor* (bv #x87 8) 's_sent)) (bv #x01 8))
+      (list
+       (arduino::=* 's_vals
+                    's_vals)
+       (arduino::=* 'x
+                    (arduino:bwand* (arduino:shr* 's_vals
+                                                  's_sent)
+                                    (arduino:or* (bv #x04 8)
+                                                 's_sent)))
+       (arduino::=* 's_sent
+                    (arduino:add* 's_sent
+                                  (bv #x01 8))))
+      '())))))
+
 (define buf-test
   (unity*
    (declare*
@@ -109,13 +190,14 @@
           (cons 'r 'recv-buf)
           (cons 's 'send-buf)))
    (initially*
-    (:=* (list 'x
-               'r
-               's)
-         (list #f
-               (empty-recv-buf* 8)
-               (nat->send-buf* 8 42))))
-   '()))
+    (list
+     (:=* (list 'x
+                'r
+                's)
+          (list #f
+                (empty-recv-buf* 8)
+                (nat->send-buf* 8 42)))))
+   (assign* '())))
 
 (define type-test
   (unity*
@@ -145,28 +227,30 @@
           (cons 'val 'natural)
           (cons 'cycle 'boolean)))
    (initially*
-    (:=* (list 'out
-               'cycle
-               'val)
-         (list 'empty
-               #t
-               42)))
+    (list
+     (:=* (list 'out
+                'cycle
+                'val)
+          (list 'empty
+                #t
+                42))))
    (assign*
-    (list (:=* (list 'out
-                     'buf
-                     'cycle)
-               (case*
-                (list (cons (list (message* (send-buf-get* 'buf))
-                                  (send-buf-next* 'buf)
-                                  #f)
-                            (and* (empty?* 'out)
-                                  (not* (send-buf-empty?* 'buf))))
-                      (cons (list 'out
-                                  (nat->send-buf* 8 'val)
-                                  #f)
-                            (and* (empty?* 'out)
-                                  (or* (send-buf-empty?* 'buf)
-                                       'cycle))))))))))
+    (list
+     (list (:=* (list 'out
+                      'buf
+                      'cycle)
+                (case*
+                 (list (cons (list (message* (send-buf-get* 'buf))
+                                   (send-buf-next* 'buf)
+                                   #f)
+                             (and* (empty?* 'out)
+                                   (not* (send-buf-empty?* 'buf))))
+                       (cons (list 'out
+                                   (nat->send-buf* 8 'val)
+                                   #f)
+                             (and* (empty?* 'out)
+                                   (or* (send-buf-empty?* 'buf)
+                                        'cycle)))))))))))
 
 (define receiver
   (unity*
@@ -176,27 +260,30 @@
           (cons 'rcvd 'boolean)
           (cons 'val 'natural)))
    (initially*
-    (:=* (list 'buf
-               'rcvd)
-         (list (empty-recv-buf* 8)
-               #f)))
+    (list
+     (:=* (list 'buf
+                'rcvd)
+          (list (empty-recv-buf* 8)
+                #f))))
    (assign*
-    (list (:=* (list 'in
-                     'buf
-                     'rcvd
-                     'val)
-               (case*
-                (list (cons (list 'empty
-                                  (recv-buf-put* 'buf (value* 'in))
-                                  'rcvd
-                                  'val)
-                            (and* (full?* 'in)
-                                  (not* (recv-buf-full?* 'buf))))
-                      (cons (list 'in
-                                  (empty-recv-buf* 8)
-                                  #t
-                                  (recv-buf->nat* 'buf))
-                            (recv-buf-full?* 'buf)))))))))
+    (list
+     (list (:=* (list 'in
+                      'buf
+                      'rcvd
+                      'val)
+                (case*
+                 (list
+                  (cons (list 'empty
+                              (recv-buf-put* 'buf (value* 'in))
+                              'rcvd
+                              'val)
+                        (and* (full?* 'in)
+                              (not* (recv-buf-full?* 'buf))))
+                  (cons (list 'in
+                              (empty-recv-buf* 8)
+                              #t
+                              (recv-buf->nat* 'buf))
+                        (recv-buf-full?* 'buf))))))))))
 
 
 ;; (time
@@ -206,4 +293,17 @@
 ;;         [verify-model (verify-loop prog sketch synth-map)])
 ;;    verify-model))
 
-(unity-prog->arduino-prog recv-buf-test)
+(time
+ (unity-prog->arduino-prog channel-recv-buf-test))
+
+;; (verify-arduino-prog channel-recv-buf-test
+;;                      channel-recv-buf-impl)
+
+;; (time
+;;  (let* ([prog channel-recv-buf-test]
+;;         [synth-map (unity-prog->synth-map prog)]
+;;         [arduino-st->unity-st (synth-map-arduino-state->unity-state synth-map)]
+;;         [arduino-start-st (synth-map-arduino-symbolic-state synth-map)]
+;;         [unity-start-st (arduino-st->unity-st arduino-start-st)]
+;;         [assign-traces (synth-traces-assign (unity-prog->synth-traces prog synth-map))])
+;;    assign-traces))

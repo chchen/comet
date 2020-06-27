@@ -5,6 +5,7 @@
          "environment.rkt"
          "semantics.rkt"
          "syntax.rkt"
+         (prefix-in unity: "../unity/concretize.rkt")
          (prefix-in unity: "../unity/environment.rkt")
          (prefix-in unity: "../unity/semantics.rkt")
          (prefix-in unity: "../unity/syntax.rkt")
@@ -252,10 +253,7 @@
       (unity:declare* unity-cxt)
       initially
       assign)
-     (let* ([ext-vars (synth-map-unity-external-vars synthesis-map)]
-            [int-vars (synth-map-unity-internal-vars synthesis-map)]
-            [arduino-cxt (synth-map-arduino-context synthesis-map)]
-            [arduino-st->unity-st (synth-map-arduino-state->unity-state synthesis-map)]
+     (let* ([arduino-st->unity-st (synth-map-arduino-state->unity-state synthesis-map)]
             [arduino-start-st (synth-map-arduino-symbolic-state synthesis-map)]
             [unity-start-st (arduino-st->unity-st arduino-start-st)]
             [unity-start-stobj (unity:stobj unity-start-st)]
@@ -269,7 +267,8 @@
                 [state (unity:stobj-state stobj)])
            (if (eq? state unity-start-st)
                '()
-               (guarded-trace guard state))))
+               (guarded-trace guard
+                              (unity:concretize-trace state guard)))))
 
        (define (stobj->guarded-traces stobj)
          (if (union? stobj)
@@ -360,6 +359,27 @@
 
     (andmap key-transition-ok? keys)))
 
+;; Find the relevant arduino-vals to unity-val,
+;; Looking for arduino-vals that share common symbolic
+;; variables with the unity-val
+(define (relevant-values unity-val arduino-vals)
+  (define (in-list? k l)
+    (if (null? l)
+        #f
+        (let ([eqv (eq? k (car l))])
+          (or (and (not (term? eqv))
+                   eqv)
+              (in-list? k (cdr l))))))
+
+  (define (get-matches sym)
+    (filter (lambda (v)
+              (in-list? sym (symbolics v)))
+            arduino-vals))
+
+  (flatten
+   (map get-matches
+        (symbolics unity-val))))
+
 (provide max-expression-depth
          max-pin-id
          synth-map
@@ -385,4 +405,5 @@
          unity-prog->synth-traces
          unity-prog->assign-state
          unity-prog->initially-state
-         monotonic-pre-to-post?)
+         monotonic-pre-to-post?
+         relevant-values)
