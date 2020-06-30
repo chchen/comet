@@ -60,13 +60,21 @@
           (cons (car trace)
                 (trim-trace (cdr trace) tail))))
 
-    (define (try-synth exp-depth unity-id unity-val)
+    (define (try-synth depth unity-id unity-val)
       (let* ([start-time (current-seconds)]
-             [arduino-vals (map cdr arduino-st)]
              [arduino-ids (unity-id->arduino-ids unity-id)]
+             [arduino-id-vals (map (lambda (i) (get-mapping i arduino-st))
+                                   arduino-ids)]
+             [extra-arduino-st (filter (lambda (k-v)
+                                         (not (member (car k-v) arduino-ids)))
+                                       arduino-st)]
+             [extra-arduino-vals (relevant-values unity-val
+                                                  (map cdr extra-arduino-st))]
+             [relevant-vals (append arduino-id-vals
+                                    extra-arduino-vals)]
              [sketch-st (begin
                           (clear-asserts!)
-                          (state?? arduino-ids exp-depth arduino-cxt arduino-st))]
+                          (state?? arduino-ids relevant-vals depth arduino-cxt arduino-st))]
              [mapped-val (unity-id->arduino-st->unity-val unity-id sketch-st)]
              [model (synthesize
                      #:forall arduino-st
@@ -76,17 +84,17 @@
           (display (format "[unity-trace->arduino-trace] ~a ~a sec. depth: ~a uid: ~a ~a -> ~a~n"
                            (sat? model)
                            (- (current-seconds) start-time)
-                           exp-depth
+                           depth
                            unity-id
-                           (relevant-values unity-val arduino-vals)
+                           relevant-vals
                            arduino-ids)
                    (current-error-port))
           (if (sat? model)
               (trim-trace (evaluate sketch-st model)
                           arduino-st)
-              (if (>= exp-depth max-expression-depth)
+              (if (>= depth max-expression-depth)
                   model
-                  (try-synth (add1 exp-depth) unity-id unity-val))))))
+                  (try-synth (add1 depth) unity-id unity-val))))))
 
      (if (eq? unity-trace unity-st)
          '()

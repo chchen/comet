@@ -19,11 +19,11 @@
                       (cdr pair)))
                cxt)))
 
-(define unops
+(define word-unops
   (list bvlnot
         bvnot))
 
-(define binops
+(define word-binops
   (list bvland
         bvlor
         bvlult
@@ -36,68 +36,78 @@
         bvlshr))
 
 (define (word-exp?? depth vals)
-  (let ([terminals (apply choose* (cons (?? word?) vals))])
-    (if (positive? depth)
-        (let ([l-expr (word-exp?? (sub1 depth) vals)]
-              [r-expr (word-exp?? (sub1 depth) vals)])
-          ((apply choose* binops) l-expr r-expr))
-        (choose* ((apply choose* unops) terminals)
-                 terminals))))
+  (let* ([terminals (apply choose* vals)])
+    (if (zero? depth)
+        terminals
+        (let* ([l-expr (word-exp?? (sub1 depth) vals)]
+               [r-expr (word-exp?? (sub1 depth) vals)]
+               [binop ((apply choose* word-binops) l-expr r-expr)]
+               [unop ((apply choose* word-unops) l-expr)])
+          (choose* terminals binop unop)))))
 
-(define (state?? l-vals expr-depth cxt state)
-  (let* ([bool-ids (type-in-context 'pin-out cxt)]
-         [word-ids (type-in-context 'byte cxt)]
-         [state-values (map (lambda (st)
-                              (cond
-                                [(word? st) st]
-                                [(boolean? st) (bool->word st)]))
-                            (map cdr state))])
-    (match l-vals
-      ['() state]
-      [(cons id tail)
-       (let* ([id-typ (get-mapping id cxt)])
-         (if (eq? id-typ 'pin-in)
-             (state?? tail expr-depth cxt state)
-             (let* ([hole (word-exp?? expr-depth state-values)]
-                    [expr (match id-typ
-                            ['byte hole]
-                            ['pin-out (bitvector->bool hole)])])
-               (cons (cons id expr)
-                     (state?? tail expr-depth cxt state)))))])))
+(define (state?? l-vals r-vals expr-depth cxt state)
+  (let ([regularized-vals (map (lambda (v)
+                                 (cond
+                                   [(boolean? v) (bool->word v)]
+                                   [(word? v) v]))
+                               r-vals)])
+
+    (define (helper ids)
+      (match ids
+        ['() state]
+        [(cons id tail)
+         (let ([id-typ (get-mapping id cxt)])
+           (if (eq? id-typ 'pin-in)
+               (helper tail)
+               (let* ([literals (list (?? word?) true-word false-word)]
+                      [vals-plus-literals (append literals regularized-vals)]
+                      [hole (word-exp?? expr-depth vals-plus-literals)]
+                      [expr (match id-typ
+                              ['byte hole]
+                              ['pin-out (bitvector->bool hole)])])
+                 (cons (cons id expr)
+                       (helper tail)))))]))
+
+    (helper l-vals)))
+
+
+(define binops
+  (list and*
+        or*
+        lt*
+        eq*
+        add*
+        bwand*
+        bwor*
+        bwxor*
+        shl*
+        shr*))
+
+(define unops
+  (list not*
+        bwnot*))
 
 ;; Inversion over expressions
 ;; Nat -> Context -> Choose Tree
 (define (exp?? depth cxt extra-exps)
-  (let* ([pins (append (type-in-context 'pin-in cxt)
-                       (type-in-context 'pin-out cxt))]
-         [vars (type-in-context 'byte cxt)]
-         [literals (list (?? word?))]
-         [terminals (append (map read* pins)
-                            vars
-                            literals
-                            extra-exps)])
-    (if (positive? depth)
-        (let ([left (exp?? (sub1 depth) cxt extra-exps)]
-              [right (exp?? (sub1 depth) cxt extra-exps)])
-          (apply choose*
-                 (append
-                  (list ((choose* not*
-                                  bwnot*)
-                         left)
-                        ((choose* and*
-                                  or*
-                                  lt*
-                                  eq*
-                                  add*
-                                  bwand*
-                                  bwor*
-                                  bwxor*
-                                  shl*
-                                  shr*)
-                         left
-                         right))
-                  terminals)))
-        (apply choose* terminals))))
+  (let* ([pin-ids (append (type-in-context 'pin-in cxt)
+                          (type-in-context 'pin-out cxt))]
+         [pin-terms (map read* pin-ids)]
+         [var-ids (type-in-context 'byte cxt)]
+         [literals (list (?? word?) true-word false-word)]
+         [terminals (append pin-terms var-ids literals extra-exps)])
+
+    (define (helper depth)
+      (let ([terminal-choice (apply choose* terminals)])
+        (if (zero? depth)
+            terminal-choice
+        (let* ([l-expr (helper (sub1 depth))]
+               [r-expr (helper (sub1 depth))]
+               [binop ((apply choose* binops) l-expr r-expr)]
+               [unop ((apply choose* unops) l-expr)])
+          (choose* terminal-choice binop unop)))))
+
+    (helper depth)))
 
 ;; Single, "context-altering" statements
 ;; variable/pin declaration
