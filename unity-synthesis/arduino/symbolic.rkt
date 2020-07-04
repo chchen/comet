@@ -1,8 +1,8 @@
 #lang rosette/safe
 
-(require "../util.rkt"
+(require "../environment.rkt"
+         "../util.rkt"
          "bitvector.rkt"
-         "environment.rkt"
          "semantics.rkt"
          "syntax.rkt"
          (prefix-in unity: "../unity/concretize.rkt")

@@ -1,12 +1,11 @@
 #lang rosette/safe
 
-(require
- "../util.rkt"
- "environment.rkt"
- "semantics.rkt"
- "symbolic.rkt"
- "syntax.rkt"
- rosette/lib/match)
+(require "../environment.rkt"
+         "../util.rkt"
+         "semantics.rkt"
+         "symbolic.rkt"
+         "syntax.rkt"
+         rosette/lib/match)
 
 (define (verify-stmt synth-map unity-post-st arduino-stmt init-cxt?)
   (let* ([start-time (current-seconds)]

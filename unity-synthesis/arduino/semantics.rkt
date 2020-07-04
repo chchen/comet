@@ -1,12 +1,10 @@
 #lang rosette/safe
 
-(require "bitvector.rkt"
-         "environment.rkt"
-         "syntax.rkt"
+(require "../environment.rkt"
          "../util.rkt"
-         rosette/lib/angelic
-         rosette/lib/match
-         rosette/lib/synthax)
+         "bitvector.rkt"
+         "syntax.rkt"
+         rosette/lib/match)
 
 (define (pin-type? t)
   (match t

@@ -2,7 +2,6 @@
 
 (require "../util.rkt"
          "bitvector.rkt"
-         "environment.rkt"
          "semantics.rkt"
          "symbolic.rkt"
          "syntax.rkt"

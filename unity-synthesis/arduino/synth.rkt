@@ -1,17 +1,16 @@
 #lang rosette/safe
 
-(require "../util.rkt"
+(require "../environment.rkt"
+         "../util.rkt"
          "buffer.rkt"
          "channel.rkt"
-         "environment.rkt"
          "inversion.rkt"
          "semantics.rkt"
          "symbolic.rkt"
          "syntax.rkt"
          (prefix-in unity: "../unity/environment.rkt")
          (prefix-in unity: "../unity/semantics.rkt")
-         (prefix-in unity: "../unity/syntax.rkt")
-         rosette/lib/match)
+         (prefix-in unity: "../unity/syntax.rkt"))
 
 (define (try-synth-expr synth-map guard val snippets)
   (let* ([arduino-cxt (synth-map-arduino-context synth-map)]

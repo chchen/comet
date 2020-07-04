@@ -1,7 +1,6 @@
 #lang rosette/safe
 
 (require "../util.rkt"
-         "environment.rkt"
          "inversion.rkt"
          "semantics.rkt"
          "symbolic.rkt"
