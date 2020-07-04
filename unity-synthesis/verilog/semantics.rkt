@@ -1,229 +1,185 @@
-#lang rosette
+#lang rosette/safe
 
-(require "../util.rkt"
-         "context.rkt"
-         "state.rkt"
+(require "../environment.rkt"
+         "../util.rkt"
          "syntax.rkt"
          rosette/lib/match)
 
-;; Build a verilog context from a program's preamble
-(define (interpret-preamble io-constraints type-declarations)
-  (define (helper preamble in out wire reg)
-    (if (null? preamble)
-        (context* in out wire reg)
-        (match (car preamble)
-          [(input* i) (helper (cdr preamble) (cons i in) out wire reg)]
-          [(output* o) (helper (cdr preamble) in (cons o out) wire reg)]
-          [(wire* w) (helper (cdr preamble) in out (cons w wire) reg)]
-          [(reg* r) (helper (cdr preamble) in out wire (cons r reg))])))
+(define vector-len 8)
 
-  (helper (append io-constraints type-declarations) '() '() '() '()))
+(define vector?
+  (bitvector vector-len))
+
+;; Build a verilog context from a program's preamble
+(define (preamble->context port-decls type-decls)
+  (define (type->mapping decl)
+    (match decl
+      [(type-decl* _ ident) (cons ident decl)]))
+
+  (define (port->mapping decl)
+    (match decl
+      [(port-decl* typ) (cons (type-decl*-ident typ) decl)]))
+
+  (append (map port->mapping port-decls)
+          (map type->mapping type-decls)))
 
 ;; Evaluate an expression that yields a value
-(define (eval exp cxt state)
-  (match exp
-    [(and* l r) (and (eval l cxt state)
-                     (eval r cxt state))]
-    [(or* l r) (or (eval l cxt state)
-                   (eval r cxt state))]
-    [(eq* l r) (eq? (eval l cxt state)
-                    (eval r cxt state))]
-    [(neq* l r) (not (eq? (eval l cxt state)
-                          (eval r cxt state)))]
-    [(not* e) (not (eval e cxt state))]
-    [(val* s) (state-get s cxt state)]
-    ['one #t]
-    ['zero #f]
-    [e e]))
+(define (evaluate-expr expr state)
+  (match expr
+    ;; Unary
+    [(unop* l)
+     (let ([l-val (evaluate-expr l state)])
+       (match expr
+         ;; bool -> bool
+         [(posedge* _) (eq? l-val #t)]
+         [(negedge* _) (eq? l-val #f)]
+         [(not* _) (not l-val)]
+         ;; vector -> vector
+         [(bwnot* _) (bvnot l-val)]))]
+    [(binop* l r)
+     (let ([l-val (evaluate-expr l state)]
+           [r-val (evaluate-expr r state)])
+       (match expr
+         ;; bool -> bool -> bool
+         [(and* _ _) (and l-val r-val)]
+         [(or* _ _) (or l-val r-val)]
+         [(eq* _ _) (eq? l-val r-val)]
+         ;; vector -> vector -> bool
+         [(bweq* _ _) (bveq l-val r-val)]
+         [(lt* _ _) (bvult l-val r-val)]
+         ;; vector -> vector -> vector
+         [(add* _ _) (bvadd l-val r-val)]
+         [(bwand* _ _) (bvand l-val r-val)]
+         [(bwor* _ _) (bvor l-val r-val)]
+         [(bwxor* _ _) (bvxor l-val r-val)]
+         [(shl* _ _) (bvshl l-val r-val)]
+         [(shr* _ _) (bvlshr l-val r-val)]))]
+    [e (cond
+         [(boolean? e) e]
+         [(vector? e) e]
+         [else (get-mapping e state)])]))
 
-;; (define-symbolic A B C D boolean?)
-
-;; Quick check: De Morgan on an expression
-;; (let* ([cxt (context* (list 'a 'b)
-;;                       '()
-;;                       (list 'a 'b)
-;;                       '())]
-;;        [state (list (cons 'a A)
-;;                     (cons 'b B))])
-;;   (verify
-;;    (assert
-;;     (eq? (eval (not* (and* (val* 'a)
-;;                                (val* 'b)))
-;;                    cxt
-;;                    state)
-;;          (eval (or* (not* (val* 'a))
-;;                         (not* (val* 'b)))
-;;                    cxt
-;;                    state)))))
-
-;; Evaluate a sequence of statements whose assignments
+;; Interpret a sequence of statements whose assignments
 ;; appear as atomic updates from some previous state
 ;; to a next state
-(define (interpret-stmt-h stmt cxt prev-state next-state)
-  (match stmt
-    ['() next-state]
-    [(cons s tail)
-     (match s
-       [(if* guard then-stmt else-stmt)
-        (let* ([next-stmt (if (eval guard cxt prev-state)
-                             then-stmt
-                             else-stmt)]
-               [if-result (interpret-stmt-h next-stmt cxt prev-state next-state)])
-          (interpret-stmt-h tail cxt prev-state if-result))]
-       [(<=* l r)
-        (let* ([val (eval r cxt prev-state)]
-               [store-result (state-put l val cxt next-state)])
-          (interpret-stmt-h tail cxt prev-state store-result))]
-       [_ 'stmt-err])]))
+(define (interpret-stmts statements state)
+  (define (helper stmts next-state)
+    (match stmts
+      ['() next-state]
+      [(cons stmt tail)
+       (match stmt
+         [(always* guard branch)
+          (let* ([guard-val (evaluate-expr guard state)]
+                 [always-state (if guard-val (helper branch next-state) next-state)])
+            (helper tail always-state))]
+         [(if* guard branch-t branch-f)
+          (let* ([guard-val (evaluate-expr guard state)]
+                 [branch-chosen (if guard-val branch-t branch-f)]
+                 [if-state (helper branch-chosen next-state)])
+            (helper tail if-state))]
+         [(<=* l r)
+          (let* ([r-val (evaluate-expr r state)])
+            (helper tail (add-mapping l r-val next-state)))])]))
 
-(define (interpret-stmt stmt cxt state)
-  (interpret-stmt-h stmt cxt state state))
+  (helper statements state))
 
-;; Quick check: assign input value to output conditionally
-;; (let* ([cxt (context* (list 'input 'guard)
-;;                       (list 'output)
-;;                       (list 'input 'guard)
-;;                       (list 'output 'internal))]
-;;        [state (list (cons 'input A)
-;;                     (cons 'output B)
-;;                     (cons 'guard C)
-;;                     (cons 'internal (not D)))]
-;;        [end-state (interpret-stmt (list (if* (val* 'guard)
-;;                                              (list (<=* 'output
-;;                                                         (val* 'input)))
-;;                                              (list (<=* 'output
-;;                                                         (not* (val* 'input)))))
-;;                                         (<=* 'internal
-;;                                              (not* (val* 'internal))))
-;;                                   cxt
-;;                                   state)])
-;;   (verify
-;;    (assert
-;;     (and (eq? (state-get 'output cxt end-state)
-;;               (if C
-;;                   (state-get 'input cxt state)
-;;                   (not (state-get 'input cxt state))))
-;;          (eq? (state-get 'internal cxt end-state)
-;;               D)))))
-
-;; Evaluate to see if a always block's sensitivity list
-;; is triggered by events in the event list
-(define (s-list-triggered? s-list events)
-  (match s-list
-    ['() #f]
-    [(cons h tail) (or (in-list? h events)
-                       (s-list-triggered? tail events))]
-    [_ 's-list-err]))
-
-;; Quick check: sensitivity list
-;; (let ([s-list (list (posedge* 'clock)
-;;                     (posedge* 'reset))])
-;;   (verify
-;;    (assert
-;;     (and (s-list-triggered? s-list (list (posedge* 'clock)))
-;;          (s-list-triggered? s-list (list (posedge* 'reset)))
-;;          (s-list-triggered? s-list (list (posedge* 'clock)
-;;                                          (posedge* 'reset)))
-;;          (not (s-list-triggered? s-list (list (posedge* 'nop))))
-;;          (not (s-list-triggered? s-list '()))))))
-
-(define (interpret-always-blocks blocks cxt state events)
-  (match blocks
-    ['() state]
-    [(cons (always* s-list
-                    stmt)
-           tail)
-     (let ([next-state (if (s-list-triggered? s-list events)
-                           (interpret-stmt stmt cxt state)
-                           state)])
-       (interpret-always-blocks tail cxt next-state events))]
-    [_ 'always-err]))
-
-;; Quick check: tiggered and untriggered always blocks
-;; (let* ([cxt (context* (list 'input)
-;;                       (list 'output)
-;;                       (list 'input)
-;;                       (list 'output))]
-;;        [start-state (list (cons 'input A)
-;;                     (cons 'output B))]
-;;        [always-blocks (list (always* (list (posedge* 'clock))
-;;                                      (list (<=* 'output
-;;                                                 (val* 'input))))
-;;                             (always* (list (posedge* 'reset))
-;;                                      (list (<=* 'output 0))))]
-;;        [after-clock (interpret-always-blocks always-blocks
-;;                                              cxt
-;;                                              start-state
-;;                                              (list (posedge* 'clock)))]
-;;        [after-reset (interpret-always-blocks always-blocks
-;;                                              cxt
-;;                                              start-state
-;;                                              (list (posedge* 'reset)))]
-;;        [after-nop (interpret-always-blocks always-blocks
-;;                                            cxt
-;;                                            start-state
-;;                                            (list (posedge* 'nop)))])
-;;   (verify
-;;    (assert
-;;     (and (eq? (state-get 'output cxt after-clock)
-;;               (state-get 'input cxt start-state))
-;;          (eq? (state-get 'output cxt after-reset)
-;;               #f)
-;;          (eq? (state-get 'output cxt after-nop)
-;;               (state-get 'output cxt start-state))))))
 
 ;; Interpret a module given context, state, and list of triggering events
-(define (interpret-module verilog-module state events)
-  (match verilog-module
-    [(module* _ _ in-outs wires-regs blocks)
-     (let* ([cxt (interpret-preamble in-outs wires-regs)])
-       (interpret-always-blocks blocks cxt state events))]
-     [_ 'module-err]))
+(define (interpret-module verilog-module environment)
+  (match environment
+    [(environment* context state)
+     (match verilog-module
+       [(verilog-module* _ _ port-decls type-decls assignments)
+        (environment* (preamble->context port-decls type-decls)
+                      (interpret-stmts assignments state))])]))
+
+(provide preamble->context
+         evaluate-expr
+         interpret-stmts
+         interpret-module)
+
+;; Tests
+
+(define-symbolic A B C D boolean?)
+
+;; Quick check: De Morgan on an expression
+(let* ([state (list (cons 'a A)
+                    (cons 'b B))])
+  (assert
+   (unsat?
+    (verify
+     (assert
+      (eq? (evaluate-expr (not* (and* 'a 'b))
+                          state)
+           (evaluate-expr (or* (not* 'a)
+                               (not* 'b))
+                          state)))))))
+
+(assert (evaluate-expr (posedge* 'clk) (list (cons 'clk #t))))
+(assert (evaluate-expr (negedge* 'reset) (list (cons 'reset #f))))
+(assert (not (evaluate-expr (negedge* 'clk) '())))
+
+;; Quick check: assign input value to output conditionally
+(let* ([start-st (list (cons 'clk #f)
+                       (cons 'input A)
+                       (cons 'output B)
+                       (cons 'guard C)
+                       (cons 'internal D))]
+       [end-st (interpret-stmts (list
+                                 (always* (negedge* 'clk)
+                                          (list (if* 'guard
+                                                     (list (<=* 'output 'input))
+                                                     (list (<=* 'output (not* 'input))))
+                                                (<=* 'internal (not* 'internal)))))
+                                start-st)]
+       [guard-val (get-mapping 'guard start-st)]
+       [input-val (get-mapping 'input start-st)]
+       [output-val (get-mapping 'output end-st)]
+       [internal-val-pre (get-mapping 'internal start-st)]
+       [internal-val-post (get-mapping 'internal end-st)])
+  (assert
+   (unsat?
+    (verify
+     (assert
+      (and (eq? output-val
+                (if guard-val input-val (not input-val)))
+           (eq? internal-val-post
+                (not internal-val-pre))))))))
 
 ;; Quick check: fifo on clock tick
-
-;; (define-symbolic A B boolean?)
-
-;; (let* ([test-module
-;;         (module*
-;;             'test
-;;             (list 'in 'out 'clock)
-;;           (list (input* 'in)
-;;                 (output* 'out)
-;;                 (input* 'clock)
-;;                 (input* 'reset))
-;;           (list (wire* 'in)
-;;                 (reg* 'out)
-;;                 (wire* 'clock)
-;;                 (wire* 'reset))
-;;           (list (always* (list (posedge* 'clock) (posedge* 'reset))
-;;                          (list (if* (val* 'reset)
-;;                                     (list (<=* 'out
-;;                                                'zero))
-;;                                     (list (<=* 'out
-;;                                                (val* 'in))))))))]
-;;        [start-state (list (cons 'in A)
-;;                           (cons 'out B))]
-;;        [cxt (interpret-preamble (list (input* 'in)
-;;                                       (output* 'out)
-;;                                       (input* 'clock)
-;;                                       (input* 'reset))
-;;                                 (list (wire* 'in)
-;;                                       (reg* 'out)
-;;                                       (wire* 'clock)
-;;                                       (wire* 'reset)))]
-;;        [reset-state (interpret-module test-module
-;;                                       (cons (cons 'reset #t)
-;;                                             start-state)
-;;                                       (list (posedge* 'reset)
-;;                                             (posedge* 'clock)))]
-;;        [clock-state (interpret-module test-module
-;;                                       (cons (cons 'reset #f)
-;;                                             start-state)
-;;                                       (list (posedge* 'clock)))])
-;;   (list reset-state clock-state))
-
-(provide interpret-module
-         interpret-preamble
-         interpret-stmt
-         eval)
+(let* ([test
+        (verilog-module*
+         'test
+         (list 'in 'out 'clock)
+         (list (input* (wire* 1 'in))
+               (output* (reg* 1 'out))
+               (input* (wire* 1 'clock))
+               (input* (wire* 1 'reset)))
+         '()
+         (list (always* (or* (posedge* 'clock)
+                             (posedge* 'reset))
+                        (list (if* 'reset
+                                   (list (<=* 'out #f))
+                                   (list (<=* 'out 'in)))))))]
+       [start-st (list (cons 'in A)
+                       (cons 'out B))]
+       [reset-st (append (list (cons 'reset #t)
+                               (cons 'clock #f))
+                         start-st)]
+       [clock-st (append (list (cons 'reset #f)
+                               (cons 'clock #t))
+                         start-st)]
+       [noop-env (interpret-module test (environment* '() start-st))]
+       [reset-env (interpret-module test (environment* '() reset-st))]
+       [clock-env (interpret-module test (environment* '() clock-st))]
+       [noop-post (environment*-state noop-env)]
+       [reset-post (environment*-state reset-env)]
+       [clock-post (environment*-state clock-env)])
+  (assert
+   (unsat?
+    (verify
+     (assert
+      (and (eq? start-st noop-post)
+           (eq? (get-mapping 'out reset-post) #f)
+           (eq? (get-mapping 'out clock-post)
+                (get-mapping 'in start-st))))))))
