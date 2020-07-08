@@ -5,10 +5,25 @@
          "syntax.rkt"
          rosette/lib/match)
 
-(define vector-len 8)
+(define vect-len 8)
 
-(define vector?
-  (bitvector vector-len))
+(define vect?
+  (bitvector vect-len))
+
+(define (width? mapping width)
+  (define (ok? w)
+    (eq? w width))
+
+  (ok?
+   (match (cdr mapping)
+     [(port-decl* t-d) (type-decl*-width t-d)]
+     [(type-decl* w _) width])))
+
+(define (bool-typ? mapping)
+  (width? mapping 1))
+
+(define (vect-typ? mapping)
+  (width? mapping vect-len))
 
 ;; Build a verilog context from a program's preamble
 (define (preamble->context port-decls type-decls)
@@ -56,7 +71,7 @@
          [(shr* _ _) (bvlshr l-val r-val)]))]
     [e (cond
          [(boolean? e) e]
-         [(vector? e) e]
+         [(vect? e) e]
          [else (get-mapping e state)])]))
 
 ;; Interpret a sequence of statements whose assignments
@@ -93,7 +108,11 @@
         (environment* (preamble->context port-decls type-decls)
                       (interpret-stmts assignments state))])]))
 
-(provide preamble->context
+(provide vect-len
+         vect?
+         bool-typ?
+         vect-typ?
+         preamble->context
          evaluate-expr
          interpret-stmts
          interpret-module)
