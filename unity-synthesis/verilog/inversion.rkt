@@ -1,129 +1,107 @@
-#lang rosette
+#lang rosette/safe
 
-(require "state.rkt"
+(require "../util.rkt"
          "syntax.rkt"
-         "context.rkt"
          "semantics.rkt"
          rosette/lib/angelic
+         rosette/lib/match
          rosette/lib/synthax)
 
-;; An expression is a tree-like structure. We constrain it with a depth.
-;; At any depth, we can have terminals. Those are determined by the context
-;; and the set of literals (in our case, 0 and 1)
-(define (exp?? depth cxt)
-  (define (add-terminals stub cxt)
-    (match cxt
-      [(context* _ _ wires regs)
-       (let ([read-names (append wires regs)])
-         (if (null? read-names)
-             ;; There are no names in the context we can derive values from
-             (apply choose* stub)
-             ;; Add val* with read-names to the list of potential productions
-             (apply choose*
-                    (val* (apply choose* read-names))
-                    stub)))]))
+(define (boolean-terminals cxt)
+  (append (list #t #f)
+          (map car
+               (filter bool-typ? cxt))))
 
-  ;; Base case: only permit literals + terminals
-  (add-terminals (if (positive? depth)
-                     (list 'one
-                           'zero
-                           (not* (exp?? (- depth 1) cxt))
-                           ((choose* and*
-                                     or*
-                                     eq*
-                                     neq*)
-                            (exp?? (- depth 1) cxt)
-                            (exp?? (- depth 1) cxt)))
-                     (list 'one
-                           'zero))
-                 cxt))
-  
-;; (define-symbolic A B boolean?)
+(define (vector-terminals cxt)
+  (append (list (?? vect?)
+                (bv 0 vect-len)
+                (bv 1 vect-len))
+          (map car
+               (filter vect-typ? cxt))))
 
-;; (let* ([cxt (context* (list 'a 'b)
-;;                       '()
-;;                       (list 'a 'b)
-;;                       '())]
-;;        [state (list (cons 'a A)
-;;                     (cons 'b B))]
-;;        [sketch (exp?? 1 cxt)]
-;;        [synth (synthesize
-;;                #:forall state
-;;                #:guarantee
-;;                (assert
-;;                 (eq?
-;;                  (eval sketch cxt state)
-;;                  (xor A B))))])
-;;   (evaluate sketch synth))
+(define bool->bool
+  (list not*))
 
-;; An assignment statement is a sequence of assignments and
-;; nothing else.
+(define vect->vect
+  (list bwnot*))
 
-(define (assignment?? depth exp-depth cxt)
-  (if (positive? depth)
-      (match cxt
-        ;; No writable names in the context.
-        ;; Admittedly, this is kind of a silly situation to be
-        ;; in, but hey, them's the breaks.
-        [(context* _ _ _ '()) '()]
-        [(context* _ _ _ write-names)
-         (choose* '()
-                  (cons (<=* (apply choose* write-names)
-                             (exp?? exp-depth cxt))
-                        (assignment?? (- depth 1)
-                                      exp-depth
-                                      cxt)))])
-      '()))
+(define bool->bool->bool
+  (list and*
+        or*
+        eq*))
 
-;; A guarded statement is a variation of the statement tree where if
-;; trees can only be one deep. The consequence of an if statement is
-;; restricted to assignments only.
+(define vect->vect->bool
+  (list bweq*
+        lt*))
 
-(define (guarded-stmt?? depth exp-depth assign-depth cxt)
-  (if (positive? depth)
-      (match cxt
-        ;; No writable names in the context.
-        ;; Admittedly, this is kind of a silly situation to be
-        ;; in, but hey, them's the breaks.
-        [(context* _ _ _ '()) '()]
-        [(context* _ _ _ write-names)
-         (choose* '()
-                  (cons (assignment?? assign-depth exp-depth cxt)
-                        (guarded-stmt?? (- depth 1)
-                                        exp-depth
-                                        assign-depth
-                                        cxt))
-                  (cons (if* (exp?? exp-depth cxt)
-                             (assignment?? assign-depth exp-depth cxt)
-                             '())
-                        (guarded-stmt?? (- depth 1)
-                                        exp-depth
-                                        assign-depth
-                                        cxt)))])
-      '()))
+(define vect->vect->vect
+  (list add*
+        bwand*
+        bwor*
+        bwxor*
+        shl*
+        shr*))
 
-;; (define-symbolic A B C D boolean?)
+(define (exp?? depth width cxt)
+  (let ([bool-terminals (boolean-terminals cxt)]
+        [vect-terminals (vector-terminals cxt)])
 
-;; (let* ([cxt (context* (list 'a 'b)
-;;                       (list 'c 'd)
-;;                       (list 'a 'b)
-;;                       (list 'c 'd))]
-;;        [state (list (cons 'a A)
-;;                     (cons 'b B))]
-;;        [sketch (stmt?? 2 0 0 cxt)]
-;;        [synth (synthesize
-;;                #:forall state
-;;                #:guarantee
-;;                (assert
-;;                 (eq?
-;;                  (verilog-sem:interpret-stmt sketch cxt state)
-;;                  (cons (cons 'd A)
-;;                        (cons (cons 'c B)
-;;                              state)))))])
-;;   (evaluate sketch synth))
+    (define (subexp?? depth width)
+      (let ([bool-terminal-choice (apply choose* bool-terminals)]
+            [vect-terminal-choice (apply choose* vect-terminals)])
+        (if (zero? depth)
+            (match width
+              [1 bool-terminal-choice]
+              [8 vect-terminal-choice])
+            (let* ([l-bool (subexp?? (sub1 depth) 1)]
+                   [r-bool (subexp?? (sub1 depth) 1)]
+                   [l-vect (subexp?? (sub1 depth) 8)]
+                   [r-vect (subexp?? (sub1 depth) 8)]
+                   [b->b-exp ((apply choose* bool->bool) l-bool)]
+                   [v->v-exp ((apply choose* vect->vect) l-vect)]
+                   [b->b->b-exp ((apply choose* bool->bool->bool) l-bool r-bool)]
+                   [v->v->b-exp ((apply choose* vect->vect->bool) l-vect r-vect)]
+                   [v->v->v-exp ((apply choose* vect->vect->vect) l-vect r-vect)])
+              (match width
+                [1 (choose* bool-terminal-choice b->b-exp b->b->b-exp v->v->b-exp)]
+                [8 (choose* vect-terminal-choice v->v-exp v->v->v-exp)])))))
 
-;; TODO: Inversion of I/O and type-declaration statements
+    (subexp?? depth width)))
 
-(provide exp??
-         assignment??
-         guarded-stmt??)
+(define (boolexp?? depth cxt)
+  (exp?? depth 1 cxt))
+
+(define (vectexp?? depth cxt)
+  (exp?? depth 8 cxt))
+
+(provide boolexp??
+         vectexp??)
+
+;; Quick Check
+
+(define-symbolic A B boolean?)
+(define-symbolic X Y vect?)
+
+(let* ([cxt (list (cons 'a (wire* 1 'a))
+                  (cons 'b (wire* 1 'b))
+                  (cons 'x (wire* 8 'x))
+                  (cons 'y (wire* 8 'y)))]
+       [st (list (cons 'a A)
+                 (cons 'b B)
+                 (cons 'x X)
+                 (cons 'y Y))]
+       [bool-sketch (boolexp?? 2 cxt)]
+       [bool-spec (and (or A B) (bveq X Y))]
+       [vect-sketch (vectexp?? 2 cxt)]
+       [vect-spec (bvshl X (bvadd Y Y))]
+       [bool-model (synthesize
+                    #:forall st
+                    #:guarantee (assert (eq? (evaluate-expr bool-sketch st)
+                                             bool-spec)))]
+       [vect-model (synthesize
+                    #:forall st
+                    #:guarantee (assert (eq? (evaluate-expr vect-sketch st)
+                                             vect-spec)))])
+  (list
+   (evaluate bool-sketch bool-model)
+   (evaluate vect-sketch vect-model)))
