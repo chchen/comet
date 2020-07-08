@@ -17,7 +17,7 @@
   (ok?
    (match (cdr mapping)
      [(port-decl* t-d) (type-decl*-width t-d)]
-     [(type-decl* w _) width])))
+     [(type-decl* w _) w])))
 
 (define (bool-typ? mapping)
   (width? mapping 1))

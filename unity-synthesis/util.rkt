@@ -42,10 +42,20 @@
 
   (andmap val-eq? keys))
 
+;; type:Symbol -> cxt:List -> List[id:Symbol]
+;; where (cons id type) in cxt
+(define (type-in-context typ cxt)
+  (map car
+       (filter (lambda (pair)
+                 (eq? typ
+                      (cdr pair)))
+               cxt)))
+
 (provide equal-length?
          in-list?
          mapping?
          add-mapping
          get-mapping
          keys
-         map-eq-modulo-keys?)
+         map-eq-modulo-keys?
+         type-in-context)

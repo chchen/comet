@@ -1,6 +1,8 @@
 #lang rosette/safe
 
 (require "synth.rkt"
+         "verilog/buffer.rkt"
+         "verilog/channel.rkt"
          "verilog/mapping.rkt"
          "unity/syntax.rkt")
 
@@ -227,10 +229,18 @@
                         (recv-buf-full?* 'buf))))))))))
 
 
+;; (time
+;;  (let* ([prog recv-buf-test]
+;;         [synth-map (unity-prog->synth-map prog)])
+;;    synth-map))
+
 (time
- (let* ([prog recv-buf-test]
-        [synth-map (unity-prog->synth-map prog)])
-   synth-map))
+ (let* ([prog send-buf-test]
+        [synth-map (unity-prog->synth-map prog)]
+        [buf-preds (buffer-predicates prog synth-map)]
+        [chan-preds (channel-predicates prog synth-map)])
+   (list buf-preds
+         chan-preds)))
 
 ;; (time
 ;;  (unity-prog->arduino-prog send-buf-test))

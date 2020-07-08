@@ -79,29 +79,29 @@
 
 ;; Quick Check
 
-(define-symbolic A B boolean?)
-(define-symbolic X Y vect?)
+;; (define-symbolic A B boolean?)
+;; (define-symbolic X Y vect?)
 
-(let* ([cxt (list (cons 'a (wire* 1 'a))
-                  (cons 'b (wire* 1 'b))
-                  (cons 'x (wire* 8 'x))
-                  (cons 'y (wire* 8 'y)))]
-       [st (list (cons 'a A)
-                 (cons 'b B)
-                 (cons 'x X)
-                 (cons 'y Y))]
-       [bool-sketch (boolexp?? 2 cxt)]
-       [bool-spec (and (or A B) (bveq X Y))]
-       [vect-sketch (vectexp?? 2 cxt)]
-       [vect-spec (bvshl X (bvadd Y Y))]
-       [bool-model (synthesize
-                    #:forall st
-                    #:guarantee (assert (eq? (evaluate-expr bool-sketch st)
-                                             bool-spec)))]
-       [vect-model (synthesize
-                    #:forall st
-                    #:guarantee (assert (eq? (evaluate-expr vect-sketch st)
-                                             vect-spec)))])
-  (list
-   (evaluate bool-sketch bool-model)
-   (evaluate vect-sketch vect-model)))
+;; (let* ([cxt (list (cons 'a (wire* 1 'a))
+;;                   (cons 'b (wire* 1 'b))
+;;                   (cons 'x (wire* 8 'x))
+;;                   (cons 'y (wire* 8 'y)))]
+;;        [st (list (cons 'a A)
+;;                  (cons 'b B)
+;;                  (cons 'x X)
+;;                  (cons 'y Y))]
+;;        [bool-sketch (boolexp?? 2 cxt)]
+;;        [bool-spec (and (or A B) (bveq X Y))]
+;;        [vect-sketch (vectexp?? 2 cxt)]
+;;        [vect-spec (bvshl X (bvadd Y Y))]
+;;        [bool-model (synthesize
+;;                     #:forall st
+;;                     #:guarantee (assert (eq? (evaluate-expr bool-sketch st)
+;;                                              bool-spec)))]
+;;        [vect-model (synthesize
+;;                     #:forall st
+;;                     #:guarantee (assert (eq? (evaluate-expr vect-sketch st)
+;;                                              vect-spec)))])
+;;   (list
+;;    (evaluate bool-sketch bool-model)
+;;    (evaluate vect-sketch vect-model)))
