@@ -2,13 +2,9 @@
 
 (require "../environment.rkt"
          "../util.rkt"
+         "../bool-bitvec/types.rkt"
          "syntax.rkt"
          rosette/lib/match)
-
-(define vect-len 8)
-
-(define vect?
-  (bitvector vect-len))
 
 (define (width? mapping width)
   (define (ok? w)
@@ -108,9 +104,7 @@
         (environment* (preamble->context port-decls type-decls)
                       (interpret-stmts assignments state))])]))
 
-(provide vect-len
-         vect?
-         bool-typ?
+(provide bool-typ?
          vect-typ?
          preamble->context
          evaluate-expr

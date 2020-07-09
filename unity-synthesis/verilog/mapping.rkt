@@ -2,6 +2,7 @@
 
 (require "../synth.rkt"
          "../util.rkt"
+         "../bool-bitvec/types.rkt"
          "semantics.rkt"
          "symbolic.rkt"
          "syntax.rkt"

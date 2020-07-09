@@ -1,6 +1,7 @@
 #lang rosette/safe
 
 (require "../util.rkt"
+         "../bool-bitvec/types.rkt"
          "syntax.rkt"
          "semantics.rkt"
          rosette/lib/angelic
@@ -13,9 +14,7 @@
                (filter bool-typ? cxt))))
 
 (define (vector-terminals cxt)
-  (append (list (?? vect?)
-                (bv 0 vect-len)
-                (bv 1 vect-len))
+  (append (list (?? vect?))
           (map car
                (filter vect-typ? cxt))))
 
@@ -42,37 +41,49 @@
         shl*
         shr*))
 
-(define (exp?? depth width cxt)
+(define (exp?? depth cxt typ)
   (let ([bool-terminals (boolean-terminals cxt)]
         [vect-terminals (vector-terminals cxt)])
 
-    (define (subexp?? depth width)
-      (let ([bool-terminal-choice (apply choose* bool-terminals)]
-            [vect-terminal-choice (apply choose* vect-terminals)])
+    (define (boolexp?? depth)
+      (let ([terminal-choice (apply choose* bool-terminals)])
         (if (zero? depth)
-            (match width
-              [1 bool-terminal-choice]
-              [8 vect-terminal-choice])
-            (let* ([l-bool (subexp?? (sub1 depth) 1)]
-                   [r-bool (subexp?? (sub1 depth) 1)]
-                   [l-vect (subexp?? (sub1 depth) 8)]
-                   [r-vect (subexp?? (sub1 depth) 8)]
-                   [b->b-exp ((apply choose* bool->bool) l-bool)]
-                   [v->v-exp ((apply choose* vect->vect) l-vect)]
-                   [b->b->b-exp ((apply choose* bool->bool->bool) l-bool r-bool)]
-                   [v->v->b-exp ((apply choose* vect->vect->bool) l-vect r-vect)]
-                   [v->v->v-exp ((apply choose* vect->vect->vect) l-vect r-vect)])
-              (match width
-                [1 (choose* bool-terminal-choice b->b-exp b->b->b-exp v->v->b-exp)]
-                [8 (choose* vect-terminal-choice v->v-exp v->v->v-exp)])))))
+            terminal-choice
+            (let* ([bool-l (boolexp?? (sub1 depth))]
+                   [bool-r (boolexp?? (sub1 depth))]
+                   [vect-l (vectexp?? (sub1 depth))]
+                   [vect-r (vectexp?? (sub1 depth))]
+                   [b->b ((apply choose* bool->bool) bool-l)]
+                   [b->b->b ((apply choose* bool->bool->bool) bool-l bool-r)]
+                   [v->v->b ((apply choose* vect->vect->bool) vect-l vect-r)])
+              (choose* terminal-choice
+                       b->b
+                       b->b->b
+                       v->v->b)))))
 
-    (subexp?? depth width)))
+    (define (vectexp?? depth)
+      (let* ([bool-term-choice (bool->vect (apply choose* bool-terminals))]
+             [vect-term-choice (apply choose* vect-terminals)]
+             [terminal-choice (choose* bool-term-choice vect-term-choice)])
+        (if (zero? depth)
+            terminal-choice
+            (let* ([vect-l (vectexp?? (sub1 depth))]
+                   [vect-r (vectexp?? (sub1 depth))]
+                   [v->v ((apply choose* vect->vect) vect-l)]
+                   [v->v->v ((apply choose* vect->vect->vect) vect-l vect-r)])
+              (choose* terminal-choice
+                       v->v
+                       v->v->v)))))
+
+    (cond
+      [(eq? typ boolean?) (boolexp?? depth)]
+      [(eq? typ vect?) (vectexp?? depth)])))
 
 (define (boolexp?? depth cxt)
-  (exp?? depth 1 cxt))
+  (exp?? depth cxt boolean?))
 
 (define (vectexp?? depth cxt)
-  (exp?? depth 8 cxt))
+  (exp?? depth cxt vect?))
 
 (provide boolexp??
          vectexp??)

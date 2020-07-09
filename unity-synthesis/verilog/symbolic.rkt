@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "semantics.rkt"
+(require "../bool-bitvec/types.rkt"
+         "semantics.rkt"
          "syntax.rkt"
          rosette/lib/match)
 
