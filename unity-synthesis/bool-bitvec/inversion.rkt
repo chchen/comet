@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "types.rkt"
+(require "../util.rkt"
+         "types.rkt"
          rosette/lib/angelic
          rosette/lib/match
          rosette/lib/synthax)
@@ -80,6 +81,16 @@
       [(eq? typ boolean?) (boolexp?? depth)]
       [(eq? typ vect?) (vectexp?? depth)])))
 
-(provide vect?
-         bool->vect
-         exp??)
+(define (state?? target-ids target-vals depth target-st)
+  (define (target-id->exp?? id)
+    (let* ([original-val (get-mapping id target-st)]
+           [exp-typ (cond
+                      [(boolean? original-val) boolean?]
+                      [(vect? original-val) vect?])])
+      (cons id (exp?? depth target-vals exp-typ))))
+
+  (append (map target-id->exp?? target-ids)
+          target-st))
+
+(provide exp??
+         state??)

@@ -30,9 +30,25 @@
   (cons (cons key val)
         mapping))
 
+;; Extract a subset of a mapping given a list of keys
+(define (subset-mapping keys mapping)
+  (filter (lambda (k-v)
+            (member (car k-v) keys))
+          mapping))
+
+;; Extract a subset of a mapping given a list of keys to exclude
+(define (inverse-subset-mapping keys mapping)
+  (filter (lambda (k-v)
+            (not (member (car k-v) keys)))
+          mapping))
+
 ;; Extract keys from a state mapping
 (define (keys state)
   (map car state))
+
+;; Extract vals from a state mapping
+(define (vals state)
+  (map cdr state))
 
 ;; Test if maps are equal given up to a list of keys
 (define (map-eq-modulo-keys? keys map-l map-r)
@@ -56,6 +72,9 @@
          mapping?
          add-mapping
          get-mapping
+         subset-mapping
+         inverse-subset-mapping
          keys
+         vals
          map-eq-modulo-keys?
          type-in-context)
