@@ -6,8 +6,6 @@
          "types.rkt"
          rosette/lib/match)
 
-(define max-expression-depth 4)
-
 ;; Given a trace sequence, return the trace sequence without the tail
 (define (trim-trace trace tail)
   (if (eq? trace tail)

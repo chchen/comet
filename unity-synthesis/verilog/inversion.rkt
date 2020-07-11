@@ -34,15 +34,16 @@
         lt*))
 
 (define vect->vect->vect
-  (list add*
-        bwand*
+  (list bwand*
         bwor*
         bwxor*
         shl*
-        shr*))
+        shr*
+        add*))
 
-(define (exp?? depth cxt typ)
-  (let ([bool-terminals (boolean-terminals cxt)]
+(define (exp?? depth cxt typ bool-snippets)
+  (let ([bool-terminals (append bool-snippets
+                                (boolean-terminals cxt))]
         [vect-terminals (vector-terminals cxt)])
 
     (define (boolexp?? depth)
@@ -62,9 +63,9 @@
                        v->v->b)))))
 
     (define (vectexp?? depth)
-      (let* ([bool-term-choice (bool->vect (apply choose* bool-terminals))]
-             [vect-term-choice (apply choose* vect-terminals)]
-             [terminal-choice (choose* bool-term-choice vect-term-choice)])
+      (let* ([bool-choice (bool->vect* (apply choose* bool-terminals))]
+             [vect-choice (apply choose* vect-terminals)]
+             [terminal-choice (choose* bool-choice vect-choice)])
         (if (zero? depth)
             terminal-choice
             (let* ([vect-l (vectexp?? (sub1 depth))]
@@ -79,14 +80,7 @@
       [(eq? typ boolean?) (boolexp?? depth)]
       [(eq? typ vect?) (vectexp?? depth)])))
 
-(define (boolexp?? depth cxt)
-  (exp?? depth cxt boolean?))
-
-(define (vectexp?? depth cxt)
-  (exp?? depth cxt vect?))
-
-(provide boolexp??
-         vectexp??)
+(provide exp??)
 
 ;; Quick Check
 

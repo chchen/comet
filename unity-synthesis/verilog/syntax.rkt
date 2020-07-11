@@ -61,6 +61,9 @@
 (struct posedge* unop* () #:transparent)
 (struct negedge* unop* () #:transparent)
 
+;; Type conversions
+(struct bool->vect* unop* () #:transparent)
+
 ;; Expressions
 ;; bool -> bool
 (struct not* unop* () #:transparent)
@@ -74,12 +77,12 @@
 (struct bweq* binop* () #:transparent)
 (struct lt* binop* () #:transparent)
 ;; vector -> vector -> vector
-(struct add* binop* () #:transparent)
 (struct bwand* binop* () #:transparent)
 (struct bwor* binop* () #:transparent)
 (struct bwxor* binop* () #:transparent)
 (struct shl* binop* () #:transparent)
 (struct shr* binop* () #:transparent)
+(struct add* binop* () #:transparent)
 
 ;; (define (emit-expression expression)
 ;;   (match expression
@@ -174,6 +177,7 @@
          <=*
          unop*
          binop*
+         bool->vect*
          not*
          bwnot*
          and*
@@ -181,12 +185,12 @@
          eq*
          bweq*
          lt*
-         add*
          bwand*
          bwor*
          bwxor*
          shl*
-         shr*)
+         shr*
+         add*)
 
 ;; Example Syntax
 ;; (display

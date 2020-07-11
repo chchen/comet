@@ -34,7 +34,7 @@
          (let* ([start-time (current-seconds)]
                 [sketch (begin
                           (clear-asserts!)
-                          (boolexp?? exp-depth target-cxt))]
+                          (exp?? exp-depth target-cxt boolean? '()))]
                 [unity-expr (apply predicate (list buffer-id))]
                 [target-val (evaluate-expr sketch target-st)]
                 [guard-val (unity:evaluate-expr guard unity-cxt unity-stobj)]

@@ -33,7 +33,7 @@
               (let* ([start-time (current-seconds)]
                      [sketch (begin
                                (clear-asserts!)
-                               (boolexp?? exp-depth target-cxt))]
+                               (exp?? exp-depth target-cxt boolean? '()))]
                      [unity-expr (apply predicate (list channel-id))]
                      [target-val (evaluate-expr sketch target-st)]
                      [unity-val (unity:evaluate-expr unity-expr unity-cxt unity-stobj)]

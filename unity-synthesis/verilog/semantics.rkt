@@ -41,6 +41,8 @@
     [(unop* l)
      (let ([l-val (evaluate-expr l state)])
        (match expr
+         ;; bool -> vector conversion
+         [(bool->vect* _) (bool->vect l-val)]
          ;; bool -> bool
          [(posedge* _) (eq? l-val #t)]
          [(negedge* _) (eq? l-val #f)]
@@ -59,12 +61,12 @@
          [(bweq* _ _) (bveq l-val r-val)]
          [(lt* _ _) (bvult l-val r-val)]
          ;; vector -> vector -> vector
-         [(add* _ _) (bvadd l-val r-val)]
          [(bwand* _ _) (bvand l-val r-val)]
          [(bwor* _ _) (bvor l-val r-val)]
          [(bwxor* _ _) (bvxor l-val r-val)]
          [(shl* _ _) (bvshl l-val r-val)]
-         [(shr* _ _) (bvlshr l-val r-val)]))]
+         [(shr* _ _) (bvlshr l-val r-val)]
+         [(add* _ _) (bvadd l-val r-val)]))]
     [e (cond
          [(boolean? e) e]
          [(vect? e) e]

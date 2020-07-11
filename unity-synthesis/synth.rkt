@@ -7,6 +7,8 @@
          "unity/semantics.rkt"
          rosette/lib/match)
 
+(define max-expression-depth 4)
+
 ;; The synthesis map provides data structures and mappings useful for synthesis:
 ;;
 ;; A list of UNITY external variables
@@ -175,7 +177,8 @@
    (map get-matches
         (symbolics unity-val))))
 
-(provide synth-map
+(provide max-expression-depth
+         synth-map
          synth-map-unity-external-vars
          synth-map-unity-internal-vars
          synth-map-target-context

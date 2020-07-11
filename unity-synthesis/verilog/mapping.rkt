@@ -12,11 +12,7 @@
          ;; unsafe! only allowed for concrete evaluation
          (only-in racket/base string->symbol))
 
-(define max-expression-depth
-  4)
-
-(define max-pin-id
-  21)
+(define max-pin-id 21)
 
 ;; Take a UNITY context and produce a corresponding synthesis map
 ;;
