@@ -3,9 +3,8 @@
 (struct verilog-module*
   (name
    port-list
-   port-declarations
-   type-declarations
-   assignments)
+   declarations
+   statements)
   #:transparent)
 
 ;; (define (emit-externals externals)

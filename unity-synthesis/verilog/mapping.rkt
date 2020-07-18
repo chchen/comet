@@ -3,7 +3,6 @@
 (require "../synth.rkt"
          "../util.rkt"
          "../bool-bitvec/types.rkt"
-         "semantics.rkt"
          "symbolic.rkt"
          "syntax.rkt"
          (prefix-in unity: "../unity/semantics.rkt")
@@ -13,6 +12,10 @@
          (only-in racket/base string->symbol))
 
 (define max-pin-id 21)
+
+(define initial-context
+  (list (cons 'clock (input* (wire* 1 'clock)))
+        (cons 'reset (input* (wire* 1 'reset)))))
 
 ;; Take a UNITY context and produce a corresponding synthesis map
 ;;
@@ -48,12 +51,19 @@
           '()
           (id-fn state))))
 
+  (define (target-id-writable? id cxt)
+    (match (get-mapping id cxt)
+      [(reg* _ _) #t]
+      [(output* _) #t]
+      [_ #f]))
+
   (define (helper unity-cxt target-cxt state-map inv-map current-pin)
     (match unity-cxt
       ['() (synth-map (unity:context->external-vars unity-context)
                       (unity:context->internal-vars unity-context)
                       target-cxt
                       (symbolic-state target-cxt)
+                      (lambda (id) (target-id-writable? id target-cxt))
                       (lambda (st) (state-mapper state-map st))
                       (lambda (id st) (state-id-mapper state-map id st))
                       (lambda (id) (get-mapping id inv-map)))]
@@ -163,7 +173,7 @@
                        inv-map)
                  current-pin))]))
 
-  (helper unity-context '() '() '() 0))
+  (helper unity-context initial-context '() '() 0))
 
 (define (unity-prog->synth-map unity-prog)
   (match unity-prog
@@ -173,5 +183,4 @@
       assign)
      (unity-context->synth-map unity-cxt)]))
 
-(provide max-expression-depth
-         unity-prog->synth-map)
+(provide unity-prog->synth-map)

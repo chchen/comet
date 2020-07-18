@@ -22,17 +22,13 @@
   (width? mapping vect-len))
 
 ;; Build a verilog context from a program's preamble
-(define (preamble->context port-decls type-decls)
-  (define (type->mapping decl)
+(define (preamble->context decls)
+  (define (decl->mapping decl)
     (match decl
+      [(port-decl* typ) (cons (type-decl*-ident typ) decl)]
       [(type-decl* _ ident) (cons ident decl)]))
 
-  (define (port->mapping decl)
-    (match decl
-      [(port-decl* typ) (cons (type-decl*-ident typ) decl)]))
-
-  (append (map port->mapping port-decls)
-          (map type->mapping type-decls)))
+  (map decl->mapping decls))
 
 ;; Evaluate an expression that yields a value
 (define (evaluate-expr expr state)
@@ -102,16 +98,35 @@
   (match environment
     [(environment* context state)
      (match verilog-module
-       [(verilog-module* _ _ port-decls type-decls assignments)
-        (environment* (preamble->context port-decls type-decls)
+       [(verilog-module* _ _ declarations assignments)
+        (environment* (preamble->context declarations)
                       (interpret-stmts assignments state))])]))
+
+(define (interpret-module-reset verilog-module environment)
+  (match environment
+    [(environment* context state)
+     (interpret-module verilog-module
+                       (environment* context
+                                     (cons (cons 'reset #t)
+                                           state)))]))
+
+(define (interpret-module-clock verilog-module environment)
+  (match environment
+    [(environment* context state)
+     (interpret-module verilog-module
+                       (environment* context
+                                     (append (list (cons 'reset #f)
+                                                   (cons 'clock #t))
+                                             state)))]))
 
 (provide bool-typ?
          vect-typ?
          preamble->context
          evaluate-expr
          interpret-stmts
-         interpret-module)
+         interpret-module
+         interpret-module-reset
+         interpret-module-clock)
 
 ;; Tests
 
@@ -165,12 +180,11 @@
 (let* ([test
         (verilog-module*
          'test
-         (list 'in 'out 'clock)
+         (list 'in 'out 'clock 'reset)
          (list (input* (wire* 1 'in))
                (output* (reg* 1 'out))
                (input* (wire* 1 'clock))
                (input* (wire* 1 'reset)))
-         '()
          (list (always* (or* (posedge* 'clock)
                              (posedge* 'reset))
                         (list (if* 'reset

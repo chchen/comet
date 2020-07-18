@@ -80,7 +80,15 @@
       [(eq? typ boolean?) (boolexp?? depth)]
       [(eq? typ vect?) (vectexp?? depth)])))
 
-(provide exp??)
+(define (stmts?? len stmts)
+  (if (zero? len)
+      '()
+      (cons (apply choose* stmts)
+            (stmts?? (sub1 len)
+                     stmts))))
+
+(provide exp??
+         stmts??)
 
 ;; Quick Check
 

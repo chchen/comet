@@ -20,7 +20,8 @@
 
 (define bool->bool->bool
   (list logical-and
-        logical-or))
+        logical-or
+        eq?))
 
 (define vect->vect->bool
   (list bveq
@@ -81,7 +82,7 @@
       [(eq? typ boolean?) (boolexp?? depth)]
       [(eq? typ vect?) (vectexp?? depth)])))
 
-(define (state?? target-ids target-vals depth target-st)
+(define (trace?? target-ids target-vals depth target-st)
   (define (target-id->exp?? id)
     (let* ([original-val (get-mapping id target-st)]
            [exp-typ (cond
@@ -92,5 +93,15 @@
   (append (map target-id->exp?? target-ids)
           target-st))
 
+(define (trace-permutation?? trace)
+  (define (helper len)
+    (if (zero? len)
+        '()
+        (cons (apply choose* trace)
+              (helper (sub1 len)))))
+
+  (helper (length trace)))
+
 (provide exp??
-         state??)
+         trace??
+         trace-permutation??)

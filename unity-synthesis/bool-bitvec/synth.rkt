@@ -14,7 +14,9 @@
             (trim-trace (cdr trace) tail))))
 
 (define (unity-trace->target-trace synth-map unity-guard unity-trace)
-  (let* ([target-cxt (synth-map-target-context synth-map)]
+  (let* ([unity-ext-vars (synth-map-unity-external-vars synth-map)]
+         [target-id-writable? (synth-map-target-id-writable? synth-map)]
+         [target-cxt (synth-map-target-context synth-map)]
          [target-st->unity-st (synth-map-target-state->unity-state synth-map)]
          [unity-id->target-st->unity-val
           (synth-map-unity-id->target-state->unity-val synth-map)]
@@ -22,19 +24,38 @@
          [target-st (synth-map-target-state synth-map)]
          [unity-st (target-st->unity-st target-st)])
 
+    (define (monotonic-ordering unity-id trace-suffix)
+      (let* ([sketch-trace (begin
+                             (clear-asserts!)
+                             (trace-permutation?? trace-suffix))]
+             [trace-monotonic? (monotonic-ok? unity-id
+                                              target-st
+                                              (append sketch-trace target-st)
+                                              unity-st
+                                              unity-trace
+                                              target-st->unity-st)]
+             [model (synthesize
+                     #:forall target-st
+                     #:assume (assert unity-guard)
+                     #:guarantee (assert trace-monotonic?))])
+        (if (sat? model)
+            (evaluate sketch-trace model)
+            model)))
+
     (define (try-synth depth unity-id-val)
       (let* ([start-time (current-seconds)]
              [unity-id (car unity-id-val)]
              [unity-val (cdr unity-id-val)]
              [target-ids (unity-id->target-ids unity-id)]
+             [writable-ids (filter target-id-writable? target-ids)]
              [target-id-vals (vals (subset-mapping target-ids target-st))]
              [target-other-vals (vals (inverse-subset-mapping target-ids target-st))]
              [relevant-vals (append target-id-vals
                                     (relevant-values unity-val target-other-vals))]
-             [sketch-st (begin
+             [sketch-trace (begin
                           (clear-asserts!)
-                          (state?? target-ids relevant-vals depth target-st))]
-             [mapped-val (unity-id->target-st->unity-val unity-id sketch-st)]
+                          (trace?? writable-ids relevant-vals depth target-st))]
+             [mapped-val (unity-id->target-st->unity-val unity-id sketch-trace)]
              [model (synthesize
                      #:forall target-st
                      #:assume (assert unity-guard)
@@ -46,11 +67,15 @@
                            depth
                            unity-id
                            relevant-vals
-                           target-ids)
+                           writable-ids)
                    (current-error-port))
           (if (sat? model)
-              (trim-trace (evaluate sketch-st model)
-                          target-st)
+              (let* ([ext-var? (member unity-id unity-ext-vars)]
+                     [synthesized-trace (evaluate sketch-trace model)]
+                     [trace-suffix (trim-trace synthesized-trace target-st)])
+                (if ext-var?
+                    (monotonic-ordering unity-id trace-suffix)
+                    trace-suffix))
               (if (>= depth max-expression-depth)
                   model
                   (try-synth (add1 depth) unity-id-val))))))

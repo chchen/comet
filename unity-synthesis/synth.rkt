@@ -23,6 +23,7 @@
    unity-internal-vars
    target-context
    target-state
+   target-id-writable?
    target-state->unity-state
    unity-id->target-state->unity-val
    unity-id->target-ids)
@@ -115,46 +116,46 @@
 ;; intermediate states, project them into UNITY states, and for every key, we
 ;; ensure that that key transitions from the unity-pre state into the unity-post
 ;; state and stays there.
-(define (monotonic-pre-to-post? keys
-                                target-pre
-                                target-post
-                                unity-pre
-                                unity-post
-                                target-st->unity-st)
+(define (monotonic-keys-ok? keys target-pre target-post unity-pre unity-post target-st->unity-st)
+  (andmap
+   (lambda (key)
+     (monotonic-ok? key target-pre target-post unity-pre unity-post target-st->unity-st))
+   keys))
 
-  (define (prefix-states target-st)
-    (if (eq? target-st target-pre)
-        (list (target-st->unity-st target-pre))
-        (cons (target-st->unity-st target-st)
-              (prefix-states (cdr target-st)))))
+;; Ensures a monotonic transition for each key-value
+;;
+;; For each target pre and post state, we generate a inclusive list of
+;; intermediate states, project them into UNITY states, and for every key, we
+;; ensure that that key transitions from the unity-pre state into the unity-post
+;; state and stays there.
+(define (monotonic-ok? key target-pre target-post unity-pre unity-post target-st->unity-st)
+  (let ([pre-val (get-mapping key unity-pre)]
+        [post-val (get-mapping key unity-post)])
 
-  (define (key-trace key states pre-val post-val)
-    (map (lambda (s)
-           (let ([val (get-mapping key s)])
-             (cond
-               [(eq? val pre-val) 'pre]
-               [(eq? val post-val) 'post]
-               [else 'fail])))
-         states))
+    (define (mark-value val)
+      (cond
+        [(eq? val pre-val) 'pre]
+        [(eq? val post-val) 'post]
+        [else 'fail]))
 
-  (define (monotonic-ok? phase last-phase)
-    (if (or (eq? last-phase 'fail)
-            (eq? phase 'fail)
-            (and (eq? phase 'post)
-                 (eq? last-phase 'pre)))
-        'fail
-        phase))
+    (define (value-trace target-st)
+      (let* ([mapped-state (target-st->unity-st target-st)]
+             [mapped-value (get-mapping key mapped-state)])
+        (cons (mark-value mapped-value)
+              (if (eq? target-st target-pre)
+                  '()
+                  (value-trace (cdr target-st))))))
 
-  (let ([prefixes (prefix-states target-post)])
+    (define (monotonic? phase last-phase)
+      (if (or (eq? last-phase 'fail)
+              (eq? phase 'fail)
+              (and (eq? phase 'post)
+                   (eq? last-phase 'pre)))
+          'fail
+          phase))
 
-    (define (key-transition-ok? key)
-      (let* ([pre-val (get-mapping key unity-pre)]
-             [post-val (get-mapping key unity-post)]
-             [trace (key-trace key prefixes pre-val post-val)])
-        (eq? (foldl monotonic-ok? 'post trace)
-             'pre)))
-
-    (andmap key-transition-ok? keys)))
+    (eq? (foldl monotonic? 'post (value-trace target-post))
+         'pre)))
 
 ;; Find the relevant target-vals to unity-val,
 ;; Looking for target-vals that share common symbolic
@@ -183,6 +184,7 @@
          synth-map-unity-internal-vars
          synth-map-target-context
          synth-map-target-state
+         synth-map-target-id-writable?
          synth-map-target-state->unity-state
          synth-map-unity-id->target-state->unity-val
          synth-map-unity-id->target-ids
@@ -200,5 +202,6 @@
          unity-prog->synth-traces
          unity-prog->assign-state
          unity-prog->initially-state
-         monotonic-pre-to-post?
+         monotonic-keys-ok?
+         monotonic-ok?
          relevant-values)

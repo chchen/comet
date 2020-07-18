@@ -1,9 +1,12 @@
 #lang rosette/safe
 
 (require "synth.rkt"
+         "bool-bitvec/synth.rkt"
+         "verilog/synth.rkt"
          "verilog/buffer.rkt"
          "verilog/channel.rkt"
          "verilog/mapping.rkt"
+         "verilog/verify.rkt"
          "unity/syntax.rkt")
 
 (define boolean-test
@@ -230,17 +233,54 @@
 
 
 ;; (time
-;;  (let* ([prog recv-buf-test]
-;;         [synth-map (unity-prog->synth-map prog)])
-;;    synth-map))
+;;  (let* ([prog channel-test]
+;;         [synth-map (unity-prog->synth-map prog)]
+;;         [buf-preds (buffer-predicates prog synth-map)]
+;;         [chan-preds (channel-predicates prog synth-map)]
+;;         [preds (append buf-preds chan-preds)]
+;;         [synth-traces (unity-prog->synth-traces prog synth-map)]
+;;         [initially-trace (synth-traces-initially synth-traces)]
+;;         [assign-traces (synth-traces-assign synth-traces)])
+;;    (map (lambda (g-t)
+;;           (unity-trace->target-trace synth-map
+;;                                      (guarded-trace-guard g-t)
+;;                                      (guarded-trace-trace g-t)))
+;;         assign-traces)))
 
 (time
- (let* ([prog send-buf-test]
-        [synth-map (unity-prog->synth-map prog)]
-        [buf-preds (buffer-predicates prog synth-map)]
-        [chan-preds (channel-predicates prog synth-map)])
-   (list buf-preds
-         chan-preds)))
+ (let* ([prog channel-test]
+        [synthesized-module (unity-prog->verilog-module prog 'synth-test)]
+        [verifier-results (verify-verilog-module prog synthesized-module)])
+   (list synthesized-module
+         verifier-results)))
+
+;; (time
+;;  (let* ([prog channel-test]
+;;         [synth-map (unity-prog->synth-map prog)])
+;;    (unity-prog->always-block synth-map prog)))
+
+;; (time
+;;  (let* ([prog channel-test]
+;;         [synth-map (unity-prog->synth-map prog)]
+;;         [buf-preds (buffer-predicates prog synth-map)]
+;;         [chan-preds (channel-predicates prog synth-map)]
+;;         [preds (append buf-preds chan-preds)]
+;;         [synth-traces (unity-prog->synth-traces prog synth-map)]
+;;         [initially-trace (synth-traces-initially synth-traces)]
+;;         [assign-traces (synth-traces-assign synth-traces)])
+;;    (list
+;;     (unity-guarded-trace->guarded-stmts synth-map initially-trace '())
+;;     (map (lambda (g-t)
+;;            (unity-guarded-trace->guarded-stmts synth-map g-t preds))
+;;          assign-traces))))
+
+;; (time
+;;  (let* ([prog channel-test]
+;;         [synth-map (unity-prog->synth-map prog)]
+;;         [buf-preds (buffer-predicates prog synth-map)]
+;;         [chan-preds (channel-predicates prog synth-map)])
+;;    (list buf-preds
+;;          chan-preds)))
 
 ;; (time
 ;;  (unity-prog->arduino-prog send-buf-test))
