@@ -1,9 +1,9 @@
 #lang rosette/safe
 
-(require "../util.rkt"
+(require "../synth.rkt"
+         "../util.rkt"
          "inversion.rkt"
          "semantics.rkt"
-         "symbolic.rkt"
          "syntax.rkt"
          rosette/lib/match
          (prefix-in unity: "../unity/environment.rkt")
@@ -22,9 +22,9 @@
       _
       _)
 
-     (let* ([arduino-cxt (synth-map-arduino-context synthesis-map)]
-            [arduino-st->unity-st (synth-map-arduino-state->unity-state synthesis-map)]
-            [arduino-st (synth-map-arduino-symbolic-state synthesis-map)]
+     (let* ([arduino-cxt (synth-map-target-context synthesis-map)]
+            [arduino-st->unity-st (synth-map-target-state->unity-state synthesis-map)]
+            [arduino-st (synth-map-target-state synthesis-map)]
             [unity-stobj (unity:stobj (arduino-st->unity-st arduino-st))])
 
             (define (try-synth exp-depth predicate channel-id)

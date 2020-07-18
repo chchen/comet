@@ -1,10 +1,12 @@
 #lang rosette/safe
 
 (require "../environment.rkt"
+         "../synth.rkt"
          "../util.rkt"
          "buffer.rkt"
          "channel.rkt"
          "inversion.rkt"
+         "mapping.rkt"
          "semantics.rkt"
          "symbolic.rkt"
          "syntax.rkt"
@@ -13,8 +15,8 @@
          (prefix-in unity: "../unity/syntax.rkt"))
 
 (define (try-synth-expr synth-map guard val snippets)
-  (let* ([arduino-cxt (synth-map-arduino-context synth-map)]
-         [arduino-st (synth-map-arduino-symbolic-state synth-map)])
+  (let* ([arduino-cxt (synth-map-target-context synth-map)]
+         [arduino-st (synth-map-target-state synth-map)])
 
     (define (try-synth exp-depth)
       (let* ([start-time (current-seconds)]
@@ -45,12 +47,12 @@
     (try-synth 0)))
 
 (define (unity-trace->arduino-trace synth-map unity-guard unity-trace)
-  (let* ([arduino-cxt (synth-map-arduino-context synth-map)]
-         [arduino-st->unity-st (synth-map-arduino-state->unity-state synth-map)]
+  (let* ([arduino-cxt (synth-map-target-context synth-map)]
+         [arduino-st->unity-st (synth-map-target-state->unity-state synth-map)]
          [unity-id->arduino-st->unity-val
-          (synth-map-unity-id->arduino-state->unity-val synth-map)]
-         [unity-id->arduino-ids (synth-map-unity-id->arduino-ids synth-map)]
-         [arduino-st (synth-map-arduino-symbolic-state synth-map)]
+          (synth-map-unity-id->target-state->unity-val synth-map)]
+         [unity-id->arduino-ids (synth-map-unity-id->target-ids synth-map)]
+         [arduino-st (synth-map-target-state synth-map)]
          [unity-st (arduino-st->unity-st arduino-st)])
 
     (define (trim-trace trace tail)
@@ -105,7 +107,7 @@
                (trim-trace unity-trace unity-st))))))
 
 (define (arduino-trace->unordered-stmts synth-map guard trace snippets)
-  (let ([arduino-cxt (synth-map-arduino-context synth-map)])
+  (let ([arduino-cxt (synth-map-target-context synth-map)])
 
     (define (try-synth trace-elem)
       (let* ([id (car trace-elem)]
@@ -124,9 +126,9 @@
          [ext-vars (synth-map-unity-external-vars synth-map)]
          [int-vars (synth-map-unity-internal-vars synth-map)]
          [all-vars (append ext-vars int-vars)]
-         [arduino-cxt (synth-map-arduino-context synth-map)]
-         [arduino-st->unity-st (synth-map-arduino-state->unity-state synth-map)]
-         [arduino-st (synth-map-arduino-symbolic-state synth-map)]
+         [arduino-cxt (synth-map-target-context synth-map)]
+         [arduino-st->unity-st (synth-map-target-state->unity-state synth-map)]
+         [arduino-st (synth-map-target-state synth-map)]
          [unity-st (arduino-st->unity-st arduino-st)])
 
     (define (try-synth len)
@@ -139,12 +141,12 @@
              [post-st-eq? (map-eq-modulo-keys? all-vars
                                                (arduino-st->unity-st arduino-post-st)
                                                unity-trace)]
-             [monotonic? (monotonic-pre-to-post? ext-vars
-                                                 arduino-st
-                                                 arduino-post-st
-                                                 unity-st
-                                                 unity-trace
-                                                 arduino-st->unity-st)]
+             [monotonic? (monotonic-keys-ok? ext-vars
+                                             arduino-st
+                                             arduino-post-st
+                                             unity-st
+                                             unity-trace
+                                             arduino-st->unity-st)]
              [model (synthesize
                      #:forall arduino-st
                      #:assume (assert guard)
@@ -170,9 +172,9 @@
          [int-vars (synth-map-unity-internal-vars synth-map)]
          [all-vars (append ext-vars int-vars)]
 
-         [arduino-cxt (synth-map-arduino-context synth-map)]
-         [arduino-st->unity-st (synth-map-arduino-state->unity-state synth-map)]
-         [arduino-st (synth-map-arduino-symbolic-state synth-map)]
+         [arduino-cxt (synth-map-target-context synth-map)]
+         [arduino-st->unity-st (synth-map-target-state->unity-state synth-map)]
+         [arduino-st (synth-map-target-state synth-map)]
          [unity-st (arduino-st->unity-st arduino-st)]
 
          [cxt-sketch (begin
@@ -194,12 +196,12 @@
          [post-st-eq? (map-eq-modulo-keys? all-vars
                                            (arduino-st->unity-st arduino-post-st)
                                            unity-post-st)]
-         [monotonic? (monotonic-pre-to-post? ext-vars
-                                             arduino-st
-                                             arduino-post-st
-                                             unity-st
-                                             unity-post-st
-                                             arduino-st->unity-st)]
+         [monotonic? (monotonic-keys-ok? ext-vars
+                                         arduino-st
+                                         arduino-post-st
+                                         unity-st
+                                         unity-post-st
+                                         arduino-st->unity-st)]
          [st-model (synthesize
                     #:forall arduino-st
                     #:guarantee (assert (and context-ok? post-st-eq? monotonic?)))]
@@ -222,9 +224,9 @@
          [ext-vars (synth-map-unity-external-vars synth-map)]
          [int-vars (synth-map-unity-internal-vars synth-map)]
          [all-vars (append ext-vars int-vars)]
-         [arduino-cxt (synth-map-arduino-context synth-map)]
-         [arduino-st->unity-st (synth-map-arduino-state->unity-state synth-map)]
-         [arduino-st (synth-map-arduino-symbolic-state synth-map)]
+         [arduino-cxt (synth-map-target-context synth-map)]
+         [arduino-st->unity-st (synth-map-target-state->unity-state synth-map)]
+         [arduino-st (synth-map-target-state synth-map)]
          [unity-st (arduino-st->unity-st arduino-st)]
          [sketch (begin
                    (clear-asserts!)
@@ -237,12 +239,12 @@
          [post-st-eq? (map-eq-modulo-keys? all-vars
                                            (arduino-st->unity-st arduino-post-st)
                                            unity-post-st)]
-         [monotonic? (monotonic-pre-to-post? ext-vars
-                                             arduino-st
-                                             arduino-post-st
-                                             unity-st
-                                             unity-post-st
-                                             arduino-st->unity-st)]
+         [monotonic? (monotonic-keys-ok? ext-vars
+                                         arduino-st
+                                         arduino-post-st
+                                         unity-st
+                                         unity-post-st
+                                         arduino-st->unity-st)]
          [model (synthesize
                  #:forall arduino-st
                  #:guarantee (assert (and context-ok? post-st-eq? monotonic?)))])

@@ -1,11 +1,8 @@
 #lang rosette/safe
 
 (require "arduino/synth.rkt"
-         "arduino/symbolic.rkt"
          "arduino/verify.rkt"
-         "unity/concretize.rkt"
          "unity/syntax.rkt"
-         rosette/lib/match
          (prefix-in arduino: "arduino/syntax.rkt"))
 
 (define boolean-test

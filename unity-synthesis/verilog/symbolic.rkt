@@ -2,7 +2,6 @@
 
 (require "../bool-bitvec/types.rkt"
          "semantics.rkt"
-         "syntax.rkt"
          rosette/lib/match)
 
 (define (symbolic-state context)

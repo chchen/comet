@@ -1,22 +1,13 @@
 #lang rosette/safe
 
-(require "../util.rkt"
+(require "../synth.rkt"
+         "../util.rkt"
          "bitvector.rkt"
          "semantics.rkt"
-         "symbolic.rkt"
          "syntax.rkt"
          rosette/lib/angelic
          rosette/lib/match
          rosette/lib/synthax)
-
-;; type:Symbol -> cxt:List -> List[id:Symbol]
-;; where (cons id type) in cxt
-(define (type-in-context typ cxt)
-  (map car
-       (filter (lambda (pair)
-                 (eq? typ
-                      (cdr pair)))
-               cxt)))
 
 (define word-unops
   (list bvlnot
@@ -163,8 +154,7 @@
                      stmts))
       '()))
 
-(provide type-in-context
-         state??
+(provide state??
          exp??
          context-stmt??
          context-stmts??

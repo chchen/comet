@@ -1,9 +1,10 @@
 #lang rosette/safe
 
 (require "../environment.rkt"
+         "../synth.rkt"
          "../util.rkt"
+         "mapping.rkt"
          "semantics.rkt"
-         "symbolic.rkt"
          "syntax.rkt"
          rosette/lib/match)
 
@@ -12,9 +13,9 @@
          [ext-vars (synth-map-unity-external-vars synth-map)]
          [int-vars (synth-map-unity-internal-vars synth-map)]
          [all-vars (append ext-vars int-vars)]
-         [arduino-cxt (synth-map-arduino-context synth-map)]
-         [arduino-st->unity-st (synth-map-arduino-state->unity-state synth-map)]
-         [arduino-st (synth-map-arduino-symbolic-state synth-map)]
+         [arduino-cxt (synth-map-target-context synth-map)]
+         [arduino-st->unity-st (synth-map-target-state->unity-state synth-map)]
+         [arduino-st (synth-map-target-state synth-map)]
          [unity-st (arduino-st->unity-st arduino-st)]
          [arduino-post-env (interpret-stmt arduino-stmt
                                            (if init-cxt?
@@ -28,12 +29,12 @@
          [post-st-eq? (map-eq-modulo-keys? all-vars
                                            (arduino-st->unity-st arduino-post-st)
                                            unity-post-st)]
-         [monotonic? (monotonic-pre-to-post? ext-vars
-                                             arduino-st
-                                             arduino-post-st
-                                             unity-st
-                                             unity-post-st
-                                             arduino-st->unity-st)]
+         [monotonic? (monotonic-keys-ok? ext-vars
+                                         arduino-st
+                                         arduino-post-st
+                                         unity-st
+                                         unity-post-st
+                                         arduino-st->unity-st)]
          [model (verify (assert (and context-ok? post-st-eq? monotonic?)))])
     (if (sat? model)
         (let* ([bad-start-st (evaluate arduino-st model)])
