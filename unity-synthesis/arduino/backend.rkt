@@ -5,7 +5,7 @@
          "../util.rkt"
          rosette/lib/match
          (only-in racket/string string-join)
-         (only-in racket/base symbol->string))
+         (only-in racket/base symbol->string substring))
 
 (define (print-arduino-program program)
   (display
@@ -57,12 +57,12 @@
     (match stmt
       [(byte* ident) (format "byte ~a;" ident)]
       [(pin-mode* pin mode) (format "pinMode(~a, ~a);"
-                                    pin
+                                    (pin-id pin)
                                     (if (eq? mode 'input)
                                         "INPUT"
                                         "OUTPUT"))]
       [(write* pin expr) (format "digitalWrite(~a, ~a);"
-                                 pin
+                                 (pin-id pin)
                                  (emit-expr expr))]
       [(:=* var expr) (format "~a = ~a;"
                               var
@@ -93,26 +93,29 @@
     [(bwxor* l r) (format "(~a ^ ~a)" (emit-expr l) (emit-expr r))]
     [(shl* l r) (format "(~a << ~a)" (emit-expr l) (emit-expr r))]
     [(shr* l r) (format "(~a >> ~a)" (emit-expr l) (emit-expr r))]
-    [(read* e) (format "digitalRead(~a)" (emit-expr e))]
+    [(read* e) (format "digitalRead(~a)" (pin-id e))]
     [t (format "~a"
                (cond
                  [(word? t) (bitvector->natural t)]
                  [else t]))]))
 
+(define (pin-id id)
+  (substring (symbol->string id) 1))
+
 (provide print-arduino-program)
 
-(print-arduino-program
- (arduino* (setup*
-            (list (byte* 'x)
-                  (pin-mode* 'd0 'input)
-                  (pin-mode* 'd1 'output)
-                  (:=* 'x 'true)
-                  (write* '1 'LOW)))
-           (loop*
-            (list (if* (and* (eq* (read* '0) 'HIGH)
-                             'x)
-                       (list (:=* 'x 'false)
-                             (write* 'd1 'HIGH))
-                       (list (:=* 'x 'false)
-                             (write* 'd1 'HIGH))
-                       )))))
+;; (print-arduino-program
+;;  (arduino* (setup*
+;;             (list (byte* 'x)
+;;                   (pin-mode* 'd0 'input)
+;;                   (pin-mode* 'd1 'output)
+;;                   (:=* 'x 'true)
+;;                   (write* 'd1 'LOW)))
+;;            (loop*
+;;             (list (if* (and* (eq* (read* 'd0) 'HIGH)
+;;                              'x)
+;;                        (list (:=* 'x 'false)
+;;                              (write* 'd1 'HIGH))
+;;                        (list (:=* 'x 'false)
+;;                              (write* 'd1 'HIGH))
+;;                        )))))
