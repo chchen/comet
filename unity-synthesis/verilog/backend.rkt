@@ -12,7 +12,8 @@
    (string-join
     (flatten
      (pretty-indent (emit-verilog-module mod) ""))
-    "\n")))
+    "\n"
+    #:after-last "\n")))
 
 (define (emit-verilog-module mod)
   (match mod
@@ -133,18 +134,18 @@
          [(or* _ _) (format "~a or ~a" l-str r-str)]))]
     [e (format "~a" e)]))
 
-(display-verilog-module
- (verilog-module*
-  'test
-  (list 'in 'out 'clock 'reset)
-  (list (input* (wire* 1 'in))
-        (output* (reg* 1 'out))
-        (input* (wire* 1 'clock))
-        (input* (wire* 1 'reset)))
-  (list (always* (or* (posedge* 'clock)
-                      (posedge* 'reset))
-                 (list (if* 'reset
-                            (list (<=* 'out #f))
-                            (list (<=* 'out (bwnot* 'in)))))))))
+;; (print-verilog-module
+;;  (verilog-module*
+;;   'test
+;;   (list 'in 'out 'clock 'reset)
+;;   (list (input* (wire* 1 'in))
+;;         (output* (reg* 1 'out))
+;;         (input* (wire* 1 'clock))
+;;         (input* (wire* 1 'reset)))
+;;   (list (always* (or* (posedge* 'clock)
+;;                       (posedge* 'reset))
+;;                  (list (if* 'reset
+;;                             (list (<=* 'out #f))
+;;                             (list (<=* 'out (bwnot* 'in)))))))))
 
 (provide print-verilog-module)

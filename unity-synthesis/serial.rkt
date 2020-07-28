@@ -1,8 +1,6 @@
 #lang rosette/safe
 
-(require "arduino/synth.rkt"
-         "arduino/verify.rkt"
-         "unity/syntax.rkt"
+(require "unity/syntax.rkt"
          (prefix-in arduino: "arduino/syntax.rkt"))
 
 (define boolean-test
@@ -282,25 +280,8 @@
                               (recv-buf->nat* 'buf))
                         (recv-buf-full?* 'buf))))))))))
 
-
-;; (time
-;;  (let* ([prog recv-buf-test]
-;;         [sketch recv-buf-sketch]
-;;         [synth-map (unity-prog->synth-map prog)]
-;;         [verify-model (verify-loop prog sketch synth-map)])
-;;    verify-model))
-
-(time
- (unity-prog->arduino-prog channel-recv-buf-test))
-
-;; (verify-arduino-prog channel-recv-buf-test
-;;                      channel-recv-buf-impl)
-
-;; (time
-;;  (let* ([prog channel-recv-buf-test]
-;;         [synth-map (unity-prog->synth-map prog)]
-;;         [arduino-st->unity-st (synth-map-arduino-state->unity-state synth-map)]
-;;         [arduino-start-st (synth-map-arduino-symbolic-state synth-map)]
-;;         [unity-start-st (arduino-st->unity-st arduino-start-st)]
-;;         [assign-traces (synth-traces-assign (unity-prog->synth-traces prog synth-map))])
-;;    assign-traces))
+(provide channel-test
+         send-buf-test
+         recv-buf-test
+         sender
+         receiver)

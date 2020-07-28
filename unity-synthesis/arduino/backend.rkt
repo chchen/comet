@@ -12,7 +12,8 @@
    (string-join
     (flatten
      (pretty-indent (emit-arduino-program program) ""))
-    "\n")))
+    "\n"
+    #:after-last "\n")))
 
 (define (emit-arduino-program program)
   (match program
