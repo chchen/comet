@@ -32,26 +32,6 @@
 ;; Read returns 0x1 (true) or 0x0 (false)
 (struct read* (pin) #:transparent)
 
-;; (define (emit-expression expression)
-;;   (match expression
-;;     [(and* left right) (format "(~a && ~a)"
-;;                                (emit-expression left)
-;;                                (emit-expression right))]
-;;     [(or* left right) (format "(~a || ~a)"
-;;                               (emit-expression left)
-;;                               (emit-expression right))]
-;;     [(eq* left right) (format "(~a == ~a)"
-;;                               (emit-expression left)
-;;                               (emit-expression right))]
-;;     [(neq* left right) (format "(~a != ~a)"
-;;                                (emit-expression left)
-;;                                (emit-expression right))]
-;;     [(not* exp) (format "!~a" (emit-expression exp))]
-;;     [(read* pin) (format "digitalRead(~a)" pin)]
-;;     [(ref* var) var]
-;;     ['true "HIGH"]
-;;     ['false "LOW"]))
-
 ;; Setup-only statements
 ;; Symbol -> Unit
 (struct byte* (ident) #:transparent)
@@ -62,59 +42,21 @@
 ;; Output
 ;; Symbol -> Byte -> Unit
 ;; Pins hold boolean values, so write coerces 0x0 -> false, true otherwise
-(struct write* (pin exp) #:transparent)
+(struct write* (pin expr) #:transparent)
 
 ;; Variable
 ;; Symbol -> Byte -> Unit
-(struct :=* (var exp) #:transparent)
+(struct :=* (var expr) #:transparent)
 
 ;; Conditional Execution
 ;; Byte -> Unit -> Unit -> Unit
-(struct if* (cond left right) #:transparent)
-
-;; Sequencing
-;; (define (emit-block block)
-;;   (list "{"
-;;         block
-;;         "}"))
-
-;; (define (emit-statements statements)
-;;   (match statements
-;;     ['() '()]
-;;     [(cons fst snd)
-;;      (let ([fst-strings
-;;             (match fst
-;;               [(var* ident) (format "int ~a;" ident)]
-;;               [(pin-mode* ident mode) (format "pinMode(~a, ~a);"
-;;                                               ident
-;;                                               (if (eq? mode 'input)
-;;                                                   "INPUT"
-;;                                                   "OUTPUT"))]
-;;               [(write!* pin exp) (format "digitalWrite(~a, ~a);"
-;;                                          pin
-;;                                          (emit-expression exp))]
-;;               [(set!* var exp) (format "~a = ~a;"
-;;                                        var
-;;                                        (emit-expression exp))]
-;;               [(if* exp left) (list (format "if (~a)" (emit-expression exp))
-;;                                     (emit-block (emit-statements left)))])])
-;;        (cons fst-strings (emit-statements snd)))]))
-
-;; (define (emit-program program)
-;;   (string-join
-;;    (flatten
-;;     (match program
-;;       [(arduino* (setup* setup)
-;;                  (loop* loop))
-;;        (list "void setup()"
-;;              (emit-block (emit-statements setup))
-;;              "void loop()"
-;;              (emit-block (emit-statements loop)))]))
-;;    "\n" #:after-last "\n"))
+(struct if* (test left right) #:transparent)
 
 (provide arduino*
          setup*
+         setup*-statements
          loop*
+         loop*-statements
          not*
          and*
          or*
@@ -133,17 +75,3 @@
          write*
          :=*
          if*)
-
-;; Example syntax
-;; (arduino* (setup*
-;;            (list (byte* 'x)
-;;                  (pin-mode* 'd0 'input)
-;;                  (pin-mode* 'd1 'output)
-;;                  (:=* 'x 'true)
-;;                  (write* '1 'LOW)))
-;;           (loop*
-;;            (list (if* (and* (eq* (read* '0) 'HIGH)
-;;                             'x)
-;;                       (list (:=* 'x 'false)
-;;                             (write* 'd1 'HIGH))
-;;                       '()))))

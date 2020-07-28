@@ -2,6 +2,7 @@
 
 (require "synth.rkt"
          "bool-bitvec/synth.rkt"
+         "verilog/backend.rkt"
          "verilog/synth.rkt"
          "verilog/buffer.rkt"
          "verilog/channel.rkt"
@@ -247,12 +248,12 @@
 ;;                                      (guarded-trace-trace g-t)))
 ;;         assign-traces)))
 
-(time
- (let* ([prog channel-test]
-        [synthesized-module (unity-prog->verilog-module prog 'synth-test)]
-        [verifier-results (verify-verilog-module prog synthesized-module)])
-   (list synthesized-module
-         verifier-results)))
+(let* ([prog receiver]
+       [synthesized-module (unity-prog->verilog-module prog 'synth-test)]
+       [verifier-results (verify-verilog-module prog synthesized-module)])
+  (if (verify-ok? verifier-results)
+      (display-verilog-module synthesized-module)
+      verifier-results))
 
 ;; (time
 ;;  (let* ([prog channel-test]

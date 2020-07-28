@@ -7,6 +7,11 @@
          "semantics.rkt"
          rosette/lib/match)
 
+(define (verify-ok? verifier-output)
+  (andmap (lambda (t)
+            (eq? t 'ok))
+          verifier-output))
+
 (define (verify-state synth-map unity-post-st target-post-st)
   (let* ([start-time (current-seconds)]
          [ext-vars (synth-map-unity-external-vars synth-map)]
@@ -44,5 +49,6 @@
     (list (verify-state synth-map unity-initially-st target-reset-st)
           (verify-state synth-map unity-assign-st target-clock-st))))
 
-(provide verify-state
+(provide verify-ok?
+         verify-state
          verify-verilog-module)

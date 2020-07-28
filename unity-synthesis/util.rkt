@@ -67,6 +67,15 @@
                       (cdr pair)))
                cxt)))
 
+;; Indentation for pretty-printing
+(define (pretty-indent items pre-fix)
+  (if (null? items)
+      '()
+      (cons (if (pair? (car items))
+                (pretty-indent (car items) (format "  ~a" pre-fix))
+                (format "~a~a" pre-fix (car items)))
+            (pretty-indent (cdr items) pre-fix))))
+
 (provide equal-length?
          in-list?
          mapping?
@@ -77,4 +86,5 @@
          keys
          vals
          map-eq-modulo-keys?
-         type-in-context)
+         type-in-context
+         pretty-indent)
