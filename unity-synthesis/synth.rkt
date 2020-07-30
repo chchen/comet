@@ -74,11 +74,12 @@
                    (union-contents stobj)))
              (symbolic-pair->guarded-trace (cons #t stobj))))
 
-       (synth-traces (stobj->guarded-traces
-                      (environment*-stobj unity-initialized-env))
-                     (stobj->guarded-traces
-                      (environment*-stobj unity-assigned-env))))]))
-
+       (begin
+         (clear-asserts!)
+         (synth-traces (stobj->guarded-traces
+                        (environment*-stobj unity-initialized-env))
+                       (stobj->guarded-traces
+                        (environment*-stobj unity-assigned-env)))))]))
 
 (define (unity-prog->assign-state unity-prog synthesis-map)
   (match unity-prog
@@ -92,8 +93,10 @@
             [unity-start-stobj (stobj unity-start-st)]
             [unity-start-env (interpret-declare unity-prog unity-start-stobj)]
             [unity-assigned-env (interpret-assign unity-prog unity-start-env)])
-       (stobj-state
-        (environment*-stobj unity-assigned-env)))]))
+       (begin
+         (clear-asserts!)
+         (stobj-state
+          (environment*-stobj unity-assigned-env))))]))
 
 (define (unity-prog->initially-state unity-prog synthesis-map)
   (match unity-prog
@@ -107,8 +110,10 @@
             [unity-start-stobj (stobj unity-start-st)]
             [unity-start-env (interpret-declare unity-prog unity-start-stobj)]
             [unity-initialized-env (interpret-initially unity-prog unity-start-env)])
-       (stobj-state
-        (environment*-stobj unity-initialized-env)))]))
+       (begin
+         (clear-asserts!)
+         (stobj-state
+          (environment*-stobj unity-initialized-env))))]))
 
 ;; Ensures a monotonic transition for each key-value
 ;;
