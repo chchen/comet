@@ -101,13 +101,16 @@
     [(buffer* sent vals)
      (buffer* (add1 sent) vals)]))
 
-(define (eval-empty-recv-buf len)
-  (define (false-list len)
-    (if (zero? len)
-        '()
-        (cons #f (false-list (sub1 len)))))
+(define (false-list len)
+  (if (zero? len)
+      '()
+      (cons #f (false-list (sub1 len)))))
 
-    (buffer* 0 (false-list len)))
+(define (eval-empty-recv-buf len)
+  (buffer* 0 (false-list len)))
+
+(define (eval-empty-send-buf len)
+    (buffer* len (false-list len)))
 
 ;; Buffer is a "little endian" list of values
 ;; when cursor is at 0, we insert at the least significant
@@ -140,16 +143,6 @@
 (define (evaluate-expr expression context state-object)
   (match state-object
     [(stobj state)
-     (define (type-check? id val)
-       (case (get-mapping id context)
-         ['boolean (boolean? val)]
-         ['natural (natural? val)]
-         ['recv-channel (channel*? val)]
-         ['send-channel (channel*? val)]
-         ['recv-buf (buffer*? val)]
-         ['send-buf (buffer*? val)]
-         [else #f]))
-
      (define (unary next-func expr)
        (let ([val (eval-helper expr)])
          (next-func val)))
@@ -178,11 +171,12 @@
          [(recv-buf-full?* b) (unary eval-recv-buf-full? b)]
          ;; Buffer Expressions
          [(nat->send-buf* l v) (binary eval-nat->send-buf l v)]
-         [(send-buf-get* b) (unary eval-send-buf-get b)]
-         [(send-buf-next* b) (unary eval-send-buf-next b)]
          [(empty-recv-buf* l) (unary eval-empty-recv-buf l)]
+         [(empty-send-buf* l) (unary eval-empty-send-buf l)]
          [(recv-buf-put* b v) (binary eval-recv-buf-put b v)]
          [(recv-buf->nat* b) (unary eval-recv-buf->nat b)]
+         [(send-buf-get* b) (unary eval-send-buf-get b)]
+         [(send-buf-next* b) (unary eval-send-buf-next b)]
          ;; Symbol |- *-Channel -> Boolean Predicates
          [(full?* id) (for/all ([val (get-mapping id state)])
                                (channel*-valid val))]

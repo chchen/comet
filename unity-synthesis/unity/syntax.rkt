@@ -149,6 +149,11 @@
   (len)
   #:transparent)
 
+;; Nat -> empty Send-buf*
+(struct empty-send-buf*
+  (len)
+  #:transparent)
+
 ;; New recv-buf* with an item added to an existing recv-buf*
 ;; Partial function! Only defined for non-full recv-buf*
 ;; Recv-buf* -> Bool -> Recv-buf*
@@ -214,6 +219,7 @@
          message*
          value*
          empty-recv-buf*
+         empty-send-buf*
          recv-buf-put*
          recv-buf->nat*
          nat->send-buf*
