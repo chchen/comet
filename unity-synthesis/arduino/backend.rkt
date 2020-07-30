@@ -58,9 +58,7 @@
       [(byte* ident) (format "byte ~a;" ident)]
       [(pin-mode* pin mode) (format "pinMode(~a, ~a);"
                                     (pin-id pin)
-                                    (if (eq? mode 'input)
-                                        "INPUT"
-                                        "OUTPUT"))]
+                                    mode)]
       [(write* pin expr) (format "digitalWrite(~a, ~a);"
                                  (pin-id pin)
                                  (emit-expr expr))]
