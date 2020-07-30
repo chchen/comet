@@ -218,34 +218,90 @@
   (unity*
    (declare*
     (list (cons 'out 'send-channel)
-          (cons 'buf 'send-buf)
           (cons 'val 'natural)
+          (cons 'buf 'send-buf)))
+   (initially*
+    (list
+     (:=* (list 'out
+                'val
+                'buf)
+          (list 'empty
+                42
+                (empty-send-buf* 8)))))
+   (assign*
+    (list
+     (list (:=* (list 'out
+                      'buf)
+                (case*
+                 (list (cons (list (message* (send-buf-get* 'buf))
+                                   (send-buf-next* 'buf))
+                             (and* (empty?* 'out)
+                                   (not* (send-buf-empty?* 'buf))))
+                       (cons (list 'out
+                                   (nat->send-buf* 8 'val))
+                             (and* (empty?* 'out)
+                                   (send-buf-empty?* 'buf)))))))))))
+
+(define sender-test
+  (unity*
+   (declare*
+    (list (cons 'out 'send-channel)
+          (cons 'buf 'boolean)
           (cons 'cycle 'boolean)))
    (initially*
     (list
      (:=* (list 'out
-                'cycle
-                'val)
+                'buf
+                'cycle)
           (list 'empty
                 #t
-                42))))
+                #t))))
    (assign*
     (list
-     (list (:=* (list 'out
-                      'buf
-                      'cycle)
-                (case*
-                 (list (cons (list (message* (send-buf-get* 'buf))
-                                   (send-buf-next* 'buf)
-                                   #f)
-                             (and* (empty?* 'out)
-                                   (not* (send-buf-empty?* 'buf))))
-                       (cons (list 'out
-                                   (nat->send-buf* 8 'val)
-                                   #f)
-                             (and* (empty?* 'out)
-                                   (or* (send-buf-empty?* 'buf)
-                                        'cycle)))))))))))
+     (list
+      (:=* (list 'out
+                 'buf
+                 'cycle)
+           (case*
+            (list (cons (list (message* 'buf)
+                              'buf
+                              #f)
+                        (and* (empty?* 'out)
+                              (and* 'buf
+                                    'cycle))))))
+      (:=* (list 'cycle)
+           (case*
+            (list (cons (list #t)
+                        (and* (empty?* 'out)
+                              (and* 'buf
+                                    (not* 'cycle))))))))))))
+
+(define guard-test
+  (unity*
+   (declare*
+    (list (cons 'a 'boolean)
+          (cons 'b 'boolean)
+          (cons 'c 'boolean)
+          (cons 'out 'boolean)))
+   (initially*
+    (list
+     (:=* (list 'out)
+          (list #f))))
+   (assign*
+    (list
+     (list
+      (:=* (list 'out)
+           (case*
+            (list (cons (list #t)
+                        (and* 'a
+                              (and* 'b
+                                    'c))))))
+      (:=* (list 'out)
+           (case*
+            (list (cons (list #f)
+                        (and* 'a
+                              (and* 'b
+                                    (not* 'c))))))))))))
 
 (define receiver
   (unity*
@@ -284,4 +340,6 @@
          send-buf-test
          recv-buf-test
          sender
+         sender-test
+         guard-test
          receiver)
