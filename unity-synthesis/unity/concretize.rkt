@@ -63,4 +63,6 @@
         (cons (cons id concrete-val)
               (concretize-trace tail guard)))))
 
-(provide concretize-trace)
+(provide concretize-expr
+         concretize-val
+         concretize-trace)

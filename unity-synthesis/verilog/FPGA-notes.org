@@ -31,7 +31,7 @@
  2. Compile the project, which runs checks and creates a binary
     "bitstream" file
 
- 3. Convert the bitstream file into TTF format, which is readable by
+ 3. Convert the SOF bitstream file into TTF format, which is readable by
     vidorcvt
     1. Use the Quartus IDE's "Convert Programming Files" utility
 
@@ -82,4 +82,3 @@
  + Non-I/O Pins (right side)
 
    + RESET: E1 (pullup high)
-

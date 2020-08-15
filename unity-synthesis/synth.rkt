@@ -162,26 +162,49 @@
     (eq? (foldl monotonic? 'post (value-trace target-post))
          'pre)))
 
-;; Find the relevant target-vals to unity-val,
-;; Looking for target-vals that share common symbolic
-;; variables with the unity-val
-(define (relevant-values unity-val target-vals)
-  (define (in-list? k l)
-    (if (null? l)
-        #f
-        (let ([eqv (eq? k (car l))])
-          (or (and (not (term? eqv))
-                   eqv)
-              (in-list? k (cdr l))))))
+(define (symbolic-in-list? k l)
+  (if (null? l)
+      #f
+      (let ([eqv (eq? k (car l))])
+        (or (and (not (term? eqv))
+                 eqv)
+            (symbolic-in-list? k (cdr l))))))
 
+;; Find the relevant target-vals to unity-val, Looking for target-vals that
+;; share common symbolic variables with the unity-val
+(define (relevant-values unity-val target-vals)
   (define (get-matches sym)
     (filter (lambda (v)
-              (in-list? sym (symbolics v)))
+              (symbolic-in-list? sym (symbolics v)))
             target-vals))
 
   (flatten
    (map get-matches
         (symbolics unity-val))))
+
+;; Find the relevant target-ids to unity-val, Looking for target-ids that map to
+;; common symbolic variables with the unity-val
+(define (relevant-ids unity-val target-state)
+  (let* ([val-symbols (symbolics unity-val)])
+    (map car
+         (filter (lambda (mapping)
+                   (symbolic-in-list? (cdr mapping) val-symbols))
+                 target-state))))
+
+;; For a list of guards evaluated in order, Rosette's symbolic unions include
+;; additional clauses to ensure that each subequent clause contains the negation
+;; of the disjunction of previous guards. This generates a parallel list of
+;;
+(define (guards->assumptions guards)
+  (define (helper initial guards)
+    (if (null? guards)
+        '()
+        (cons initial
+              (helper (and (not (car guards))
+                           initial)
+                      (cdr guards)))))
+
+  (helper #t guards))
 
 (provide max-expression-depth
          synth-map
@@ -209,4 +232,6 @@
          unity-prog->initially-state
          monotonic-keys-ok?
          monotonic-ok?
-         relevant-values)
+         relevant-values
+         relevant-ids
+         guards->assumptions)

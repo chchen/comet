@@ -42,13 +42,13 @@
             (not (member (car k-v) keys)))
           mapping))
 
-;; Extract keys from a state mapping
-(define (keys state)
-  (map car state))
+;; Extract keys from a mapping
+(define (keys mapping)
+  (map car mapping))
 
-;; Extract vals from a state mapping
-(define (vals state)
-  (map cdr state))
+;; Extract vals from a mapping
+(define (vals mapping)
+  (map cdr mapping))
 
 ;; Test if maps are equal given up to a list of keys
 (define (map-eq-modulo-keys? keys map-l map-r)

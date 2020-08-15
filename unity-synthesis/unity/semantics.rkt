@@ -312,7 +312,6 @@
 
 ;; Assert that send-buf and recv-buf conversions work
 
-(current-bitwidth 8)
 (define-symbolic N integer?)
 (define (transfer-buf from to)
   (if (eval-send-buf-empty? from)
