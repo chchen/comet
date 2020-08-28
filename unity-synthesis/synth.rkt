@@ -232,6 +232,7 @@
          unity-prog->initially-state
          monotonic-keys-ok?
          monotonic-ok?
+         symbolic-in-list?
          relevant-values
          relevant-ids
          guards->assumptions)

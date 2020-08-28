@@ -78,88 +78,67 @@
         bwnot*))
 
 ;; Inversion over expressions
-;; Nat -> Context -> Choose Tree
+;; Nat -> Context -> Snippets -> Choose Tree
 (define (exp?? depth cxt extra-exps)
-  (let* ([pin-ids (append (type-in-context 'pin-in cxt)
-                          (type-in-context 'pin-out cxt))]
+  (let* ([idents (keys cxt)])
+    (exp-modulo-idents?? depth cxt extra-exps idents)))
+
+;; Inversion over expressions
+;; Nat -> Context -> Snippets -> Ident-symbols -> Choose Tree
+(define (exp-modulo-idents?? depth cxt extra-exps ident-symbols)
+  (define (relevant? id)
+    (in-list? id ident-symbols))
+
+  (let* ([pin-ids (filter relevant?
+                          (append (type-in-context 'pin-in cxt)
+                                  (type-in-context 'pin-out cxt)))]
          [pin-terms (map read* pin-ids)]
-         [var-ids (type-in-context 'byte cxt)]
-         [literals (list (?? word?) true-word false-word)]
-         [terminals (append pin-terms var-ids literals extra-exps)])
+         [var-ids (filter relevant?
+                          (type-in-context 'byte cxt))]
+         [terminals (append pin-terms var-ids extra-exps)]
+         [literals (list (?? word?) true-word false-word)])
 
     (define (helper depth)
-      (let ([terminal-choice (apply choose* terminals)])
-        (if (zero? depth)
-            terminal-choice
-        (let* ([l-expr (helper (sub1 depth))]
-               [r-expr (helper (sub1 depth))]
-               [binop ((apply choose* binops) l-expr r-expr)]
-               [unop ((apply choose* unops) l-expr)])
-          (choose* terminal-choice binop unop)))))
+      (if (zero? depth)
+          (let* ([terminal-choice (if (null? terminals)
+                                      '()
+                                      (list (apply choose* terminals)))]
+                 [unop-terminal-choice (if (null? terminal-choice)
+                                           '()
+                                           (list ((apply choose* unops) terminal-choice)))])
+            (apply choose* (append literals terminal-choice unop-terminal-choice)))
+          (let* ([l-expr (helper (sub1 depth))]
+                 [r-expr (helper (sub1 depth))])
+            ((apply choose* binops) l-expr r-expr))))
 
     (helper depth)))
 
 ;; Single, "context-altering" statements
 ;; variable/pin declaration
 ;; Nat -> Context -> Choose Tree
-(define (context-stmt?? cxt)
-  (let* ([inputs (type-in-context 'pin-in cxt)]
-         [outputs (type-in-context 'pin-out cxt)]
-         [vars (type-in-context 'byte cxt)]
-         [i-terms (if (pair? inputs)
-                      (list (pin-mode* (apply choose* inputs)
-                                       'INPUT))
-                      '())]
-         [o-terms (if (pair? outputs)
-                      (list (pin-mode* (apply choose* outputs)
-                                       'OUTPUT))
-                      '())]
-         [v-terms (if (pair? vars)
-                      (list (byte* (apply choose* vars)))
-                      '())]
-         [choose-terms (append i-terms
-                               o-terms
-                               v-terms)])
-    (apply choose* choose-terms)))
+(define (context-stmt?? cxt-map)
+  (let* ([ident (car cxt-map)]
+         [input-term (pin-mode* ident 'INPUT)]
+         [output-term (pin-mode* ident 'OUTPUT)]
+         [var-term (byte* ident)])
+    (choose* input-term output-term var-term)))
 
-;; Sequence of unconditional context-altering statements
-;; Nat -> Nat -> Context -> Choose Tree
-(define (context-stmts?? stmt-depth cxt)
-  (if (positive? stmt-depth)
-      (cons (context-stmt?? cxt)
-            (context-stmts?? (sub1 stmt-depth)
-                             cxt))
-      '()))
-
-;; Sequence of conditional statements. Think of the
-;; conditional expressions on one line, with unconditional
-;; statements of length stmt-depth hung on each
-;; Nat -> Guarded-stmts -> Choose Tree
-(define (cond-stmts?? cond-depth guarded-stmts)
-  (if (positive? cond-depth)
-      (let* ([pick (apply choose* guarded-stmts)]
-             [guard (guarded-stmt-guard pick)]
-             [stmts (guarded-stmt-stmt pick)])
-        (cons (if* guard
-                   stmts
-                   (cond-stmts?? (sub1 cond-depth)
-                                 guarded-stmts))
-              '()))
-      '()))
-
-(define (stmts?? len stmts)
+;; Produce a sequence that represents an arbitrary ordering, including
+;; repetitions, up to an arbitrary length
+(define (ordering?? len elements)
   (if (positive? len)
-      (cons (apply choose* stmts)
-            (stmts?? (sub1 len)
-                     stmts))
+      (cons (apply choose* elements)
+            (ordering?? (sub1 len)
+                     elements))
       '()))
 
-(provide state??
+(provide word-unops
+         word-binops
+         state??
          exp??
+         exp-modulo-idents??
          context-stmt??
-         context-stmts??
-         cond-stmts??
-         stmts??)
+         ordering??)
 
 ;; (define (sym-count u)
 ;;   (length (symbolics u)))

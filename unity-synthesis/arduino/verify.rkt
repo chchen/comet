@@ -37,8 +37,11 @@
                                          arduino-st->unity-st)]
          [model (verify (assert (and context-ok? post-st-eq? monotonic?)))])
     (if (sat? model)
-        (let* ([bad-start-st (evaluate arduino-st model)])
-          (arduino-st->unity-st bad-start-st))
+        (let* ([bad-arduino-st (evaluate arduino-st model)]
+               [bad-unity-st (arduino-st->unity-st bad-arduino-st)])
+          (list (cons 'arduino bad-arduino-st)
+                (cons 'unity bad-unity-st)
+                (cons 'arduino-post (interpret-stmt arduino-stmt arduino-cxt bad-arduino-st))))
         'ok)))
 
 (define (verify-arduino-prog unity-prog arduino-prog)

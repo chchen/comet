@@ -14,11 +14,14 @@
 ;;         [verify-model (verify-loop prog sketch synth-map)])
 ;;    verify-model))
 
-(print-arduino-program
- (unity-prog->arduino-prog sender))
+(current-bitwidth 9)
 
+(time
 (print-arduino-program
- (unity-prog->arduino-prog receiver))
+ (unity-prog->arduino-prog sender)))
+
+(time (print-arduino-program
+ (unity-prog->arduino-prog receiver)))
 
 ;; (verify-arduino-prog channel-recv-buf-test
 ;;                      channel-recv-buf-impl)

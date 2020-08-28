@@ -76,6 +76,17 @@
                 (format "~a~a" pre-fix (car items)))
             (pretty-indent (cdr items) pre-fix))))
 
+;; Ugh a list prefix function
+(define (prefixes lst)
+  (define (helper l acc)
+    (if (null? l)
+        (list acc)
+        (cons acc
+              (helper (cdr l)
+                      (append acc (list (car l)))))))
+
+  (helper lst '()))
+
 (provide equal-length?
          in-list?
          mapping?
@@ -87,4 +98,5 @@
          vals
          map-eq-modulo-keys?
          type-in-context
-         pretty-indent)
+         pretty-indent
+         prefixes)
