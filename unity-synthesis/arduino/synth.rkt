@@ -3,8 +3,6 @@
 (require "../environment.rkt"
          "../synth.rkt"
          "../util.rkt"
-         "buffer.rkt"
-         "channel.rkt"
          "inversion.rkt"
          "mapping.rkt"
          "semantics.rkt"
@@ -35,21 +33,21 @@
           (list bvnot)))
 
 
-(define (try-synth-expr synth-map guard unity-val extra-snippets)
+(define (try-synth-expr synth-map postulate unity-val extra-snippets)
   (let* ([arduino-cxt (synth-map-target-context synth-map)]
          [arduino-st (synth-map-target-state synth-map)]
-         [val (unity:concretize-val unity-val guard)]
+         [val (unity:concretize-val unity-val postulate)]
          [val-ids (relevant-ids val arduino-st)]
          [snippets (match val
                      [(expression op left right)
                       (if (in-list? op decomposable-binops)
-                          (append (list (try-synth-expr synth-map guard left extra-snippets)
-                                        (try-synth-expr synth-map guard right extra-snippets))
+                          (append (list (try-synth-expr synth-map postulate left extra-snippets)
+                                        (try-synth-expr synth-map postulate right extra-snippets))
                                   extra-snippets)
                           extra-snippets)]
                      [(expression op expr)
                       (if (in-list? op decomposable-unops)
-                          (append (list (try-synth-expr synth-map guard expr extra-snippets))
+                          (append (list (try-synth-expr synth-map postulate expr extra-snippets))
                                   extra-snippets)
                           extra-snippets)]
                      [_ extra-snippets])])
@@ -62,7 +60,7 @@
              [sketch-val (evaluate-expr sketch arduino-cxt arduino-st)]
              [model (synthesize
                      #:forall arduino-st
-                     #:assume (assert guard)
+                     #:assume (assert postulate)
                      #:guarantee (assert (eq? (if (boolean? val)
                                                   (bitvector->bool sketch-val)
                                                   sketch-val)

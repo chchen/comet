@@ -12,16 +12,14 @@
     ['pin-out #t]
     [_ #f]))
 
-;; Evaluate
+;; Evaluate an expression. Takes an expression, context, and a state
 (define (evaluate-expr expression context state)
   (define (unexp next expr)
-    (let ([val (eval-helper expr)])
-      (next val)))
+    (next (eval-helper expr)))
 
   (define (binexp next left right)
-    (let ([val-l (eval-helper left)]
-          [val-r (eval-helper right)])
-      (next val-l val-r)))
+    (next (eval-helper left)
+          (eval-helper right)))
 
   (define (eval-helper expr)
     (match expr
@@ -76,12 +74,12 @@
                           context
                           (add-mapping var val state)))]
        [(if* test left right)
-        (let ([test-val (evaluate-expr test context state)])
-          (let* ([branch-to-take (if (bitvector->bool test-val) left right)]
-                 [taken-env (interpret-stmt branch-to-take context state)]
-                 [taken-cxt (environment*-context taken-env)]
-                 [taken-st (environment*-state taken-env)])
-            (interpret-stmt tail taken-cxt taken-st)))])]))
+        (let* ([test-val (evaluate-expr test context state)]
+               [branch-to-take (if (bitvector->bool test-val) left right)]
+               [taken-env (interpret-stmt branch-to-take context state)]
+               [taken-cxt (environment*-context taken-env)]
+               [taken-st (environment*-state taken-env)])
+          (interpret-stmt tail taken-cxt taken-st))])]))
 
 (provide evaluate-expr
          interpret-stmt)

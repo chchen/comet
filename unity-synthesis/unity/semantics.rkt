@@ -144,13 +144,11 @@
   (match state-object
     [(stobj state)
      (define (unary next-func expr)
-       (let ([val (eval-helper expr)])
-         (next-func val)))
+       (next-func (eval-helper expr)))
 
      (define (binary next-func expr-l expr-r)
-       (let ([val-l (eval-helper expr-l)]
-             [val-r (eval-helper expr-r)])
-         (next-func val-l val-r)))
+       (next-func (eval-helper expr-l)
+                  (eval-helper expr-r)))
 
      (define (eval-helper expr)
        (match expr
@@ -188,13 +186,9 @@
          ;; Terminals
          [term
           (cond
-            ;; 'empty reserved word
             [(eq? term 'empty) (channel* #f null)]
-            ;; boolean literals
             [(boolean? term) term]
-            ;; natural numbers
             [(natural? term) term]
-            ;; all other symbols are variable references
             [(symbol? expr) (get-mapping expr state)])]))
 
      (eval-helper expression)]))

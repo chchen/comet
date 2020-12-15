@@ -10,22 +10,25 @@
 (define max-expression-depth 4)
 
 ;; The synthesis map provides data structures and mappings useful for synthesis:
-;;
-;; A list of UNITY external variables
-;; A list of UNITY internal variables
-;; A Verilog context implementing the UNITY context
-;; A symbolic Verilog state from the Verilog context
-;; A function: Verilog state -> UNITY state
-;; A function: UNITY identifier -> Verilog state -> UNITY value
-;; A function: UNITY identifier -> a list of Verilog identifiers
 (struct synth-map
-  (unity-external-vars
+  (;; UNITY external variables
+   unity-external-vars
+   ;; UNITY internal variables
    unity-internal-vars
+   ;; target type context
    target-context
+   ;; target symbolic state
    target-state
+   ;; is the target variable writable?
+   ;; target ident -> boolean
    target-id-writable?
+   ;; target state -> unity state
    target-state->unity-state
+   ;; what is the unity variable's value in the mapped state
+   ;; unity ident -> target-state -> unity value
    unity-id->target-state->unity-val
+   ;; what target idents map to the unity variable
+   ;; unity ident -> target idents
    unity-id->target-ids)
   #:transparent)
 

@@ -1153,12 +1153,14 @@
 
 (current-bitwidth 9)
 
-(print-arduino-program proposer-impl)
+;; (print-arduino-program proposer-impl)
 
-(print-arduino-program acceptor-impl)
+;; (print-arduino-program acceptor-impl)
 
-;; (time
-;;  (unity-prog->arduino-prog proposer))
+;; cpu time: 435624 real time: 2756502 gc time: 125570
+(time
+ (unity-prog->arduino-prog proposer))
 
+;; cpu time: 54464 real time: 714941 gc time: 5057
 ;; (time
 ;;  (unity-prog->arduino-prog acceptor))

@@ -61,6 +61,25 @@
                               (and* 'in-read
                                     (full?* 'in)))))))))))
 
+(define channel-fifo
+  (unity*
+   (declare*
+    (list (cons 'in 'recv-channel)
+          (cons 'out 'send-channel)))
+   (initially*
+    (list
+     (:=* (list 'out)
+          (list 'empty))))
+   (assign*
+    (list
+     (list
+      (:=* (list 'in
+                 'out)
+           (case* (list (cons (list 'empty
+                                    (message* (value* 'in)))
+                              (and* (empty?* 'out)
+                                    (full?* 'in)))))))))))
+
 (define recv-buf-test
   (unity*
    (declare*
@@ -242,6 +261,32 @@
                              (and* (empty?* 'out)
                                    (send-buf-empty?* 'buf)))))))))))
 
+(define sender-simple
+  (unity*
+   (declare*
+    (list (cons 'out 'send-channel)
+          (cons 'buf 'send-buf)))
+   (initially*
+    (list
+     (:=* (list 'out
+                'buf)
+          (list 'empty
+                (empty-send-buf* 8)))))
+   (assign*
+    (list
+     (list (:=* (list 'out
+                      'buf)
+                (case*
+                 (list (cons (list (message* (send-buf-get* 'buf))
+                                   (send-buf-next* 'buf))
+                             (and* (empty?* 'out)
+                                   (not* (send-buf-empty?* 'buf)))))))
+           (:=* (list 'buf)
+                (case*
+                 (list (cons (list (nat->send-buf* 8 42))
+                             (and* (empty?* 'out)
+                                   (send-buf-empty?* 'buf)))))))))))
+
 (define sender-test
   (unity*
    (declare*
@@ -308,38 +353,34 @@
    (declare*
     (list (cons 'in 'recv-channel)
           (cons 'buf 'recv-buf)
-          (cons 'rcvd 'boolean)
           (cons 'val 'natural)))
    (initially*
     (list
-     (:=* (list 'buf
-                'rcvd)
-          (list (empty-recv-buf* 8)
-                #f))))
+     (:=* (list 'buf)
+          (list (empty-recv-buf* 8)))))
    (assign*
     (list
      (list (:=* (list 'in
                       'buf
-                      'rcvd
                       'val)
                 (case*
                  (list
                   (cons (list 'empty
                               (recv-buf-put* 'buf (value* 'in))
-                              'rcvd
                               'val)
                         (and* (full?* 'in)
                               (not* (recv-buf-full?* 'buf))))
                   (cons (list 'in
                               (empty-recv-buf* 8)
-                              #t
                               (recv-buf->nat* 'buf))
                         (recv-buf-full?* 'buf))))))))))
 
 (provide channel-test
+         channel-fifo
          send-buf-test
          recv-buf-test
          sender
+         sender-simple
          sender-test
          guard-test
          receiver)
