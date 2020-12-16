@@ -5,21 +5,21 @@
          rosette/lib/match)
 
 (define (symbolic-state context)
-  (define (symbolic-boolean)
-    (define-symbolic* b boolean?)
-    b)
+  (define (symbolic-boolean id)
+    (define s (constant id boolean?))
+    s)
 
-  (define (symbolic-vect)
-    (define-symbolic* b vect?)
-    b)
+  (define (symbolic-vect id)
+    (define s (constant id vect?))
+    s)
 
   (define (type-mapping->state-mapping typ-map)
     (match typ-map
       [(cons ident typ-decl)
        (cons ident
              (cond
-               [(bool-typ? typ-map) (symbolic-boolean)]
-               [(vect-typ? typ-map) (symbolic-vect)]))]))
+               [(bool-typ? typ-map) (symbolic-boolean ident)]
+               [(vect-typ? typ-map) (symbolic-vect ident)]))]))
 
   (map type-mapping->state-mapping context))
 
