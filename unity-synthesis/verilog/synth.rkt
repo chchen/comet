@@ -12,14 +12,46 @@
          "semantics.rkt"
          "symbolic.rkt"
          "syntax.rkt"
+         (prefix-in unity: "../unity/concretize.rkt")
          (prefix-in unity: "../unity/environment.rkt")
          (prefix-in unity: "../unity/semantics.rkt")
          (prefix-in unity: "../unity/syntax.rkt")
          rosette/lib/match)
 
-(define (try-synth-expr synth-map guard val snippets)
+(define decomposable-binops
+  (append (list &&
+                ||
+                <=>)
+          (list bvadd
+                bvand
+                bveq
+                bvlshr
+                bvor
+                bvshl
+                bvult
+                bvxor)))
+
+(define decomposable-unops
+  (append (list !)
+          (list bvnot)))
+
+(define (try-synth-expr synth-map postulate unity-val extra-snippets)
   (let* ([target-cxt (synth-map-target-context synth-map)]
-         [target-st (synth-map-target-state synth-map)])
+         [target-st (synth-map-target-state synth-map)]
+         [val (unity:concretize-val unity-val postulate)]
+         [snippets (match val
+                     [(expression op left right)
+                      (if (in-list? op decomposable-binops)
+                          (append (list (try-synth-expr synth-map postulate left extra-snippets)
+                                        (try-synth-expr synth-map postulate right extra-snippets))
+                                  extra-snippets)
+                          extra-snippets)]
+                     [(expression op expr)
+                      (if (in-list? op decomposable-unops)
+                          (append (list (try-synth-expr synth-map postulate expr extra-snippets))
+                                  extra-snippets)
+                          extra-snippets)]
+                     [_ extra-snippets])])
 
     (define (try-synth exp-depth)
       (let* ([start-time (current-seconds)]
@@ -32,7 +64,7 @@
              [sketch-val (evaluate-expr sketch target-st)]
              [model (synthesize
                      #:forall target-st
-                     #:assume (assert guard)
+                     #:assume (assert postulate)
                      #:guarantee (assert (eq? sketch-val val)))])
         (begin
           (display (format "[try-synth-expr] ~a ~a sec. depth: ~a ~a~n"
@@ -89,9 +121,10 @@
                    (guarded-stmts->conditional-stmts tail))))))
 
 (define (unity-prog->always-block synth-map unity-prog)
-  (let* ([buf-preds (buffer-predicates unity-prog synth-map)]
-         [chan-preds (channel-predicates unity-prog synth-map)]
-         [preds (append buf-preds chan-preds)]
+  (let* (;; [buf-preds (buffer-predicates unity-prog synth-map)]
+         ;; [chan-preds (channel-predicates unity-prog synth-map)]
+         ;; [preds (append buf-preds chan-preds)]
+         [preds '()]
          [synth-traces (unity-prog->synth-traces unity-prog synth-map)]
          [initially-trace (synth-traces-initially synth-traces)]
          [assign-traces (synth-traces-assign synth-traces)]
@@ -132,32 +165,6 @@
                      port-list
                      declarations
                      (list always-block))))
-
-;; (define (unity-prog->target-prog unity-prog)
-;;   (let* ([synth-map (unity-prog->synth-map unity-prog)]
-;;          [synth-tr (unity-prog->synth-traces unity-prog synth-map)]
-;;          [initially-state (unity-prog->initially-state unity-prog synth-map)]
-;;          [assign-state (unity-prog->assign-state unity-prog synth-map)]
-;;          [buffer-preds (buffer-predicates unity-prog synth-map)]
-;;          [channel-preds (channel-predicates unity-prog synth-map)]
-;;          [preds (append buffer-preds
-;;                         channel-preds)]
-;;          [initially-guarded-trace (synth-traces-initially synth-tr)]
-;;          [assign-guarded-traces (synth-traces-assign synth-tr)]
-;;          [assign-guarded-stmts (map
-;;                                 (lambda (gd-tr)
-;;                                   (unity-guarded-trace->guarded-stmts synth-map
-;;                                                                       gd-tr
-;;                                                                       preds))
-;;                                 assign-guarded-traces)]
-;;          [loop-stmts (guarded-stmts->loop synth-map assign-state assign-guarded-stmts)]
-;;          [initially-guarded-stmts (unity-guarded-trace->guarded-stmts synth-map
-;;                                                                       initially-guarded-trace
-;;                                                                       preds)]
-;;          [setup-stmts (guarded-stmts->setup synth-map initially-state initially-guarded-stmts)])
-;;     (target*
-;;      (setup* setup-stmts)
-;;      (loop* loop-stmts))))
 
 (provide try-synth-expr
          target-trace->target-stmts
