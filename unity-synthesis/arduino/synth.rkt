@@ -18,7 +18,8 @@
 
 (define decomposable-binops
   (append (list &&
-                ||)
+                ||
+                <=>)
           (list bvadd
                 bvand
                 bveq
