@@ -106,7 +106,7 @@
          [(and* _ _) (format "(~a && ~a)" l-str r-str)]
          [(or* _ _) (format "(~a || ~a)" l-str r-str)]
          [(eq* _ _) (format "(~a == ~a)" l-str r-str)]
-         [(bweq* _ _) (format "(~a === ~a)" l-str r-str)]
+         [(bweq* _ _) (format "(~a == ~a)" l-str r-str)]
          [(lt* _ _) (format "(~a < ~a)" l-str r-str)]
          [(bwand* _ _) (format "(~a & ~a)" l-str r-str)]
          [(bwor* _ _) (format "(~a | ~a)" l-str r-str)]
