@@ -209,10 +209,72 @@
     (if (eq? unity-trace unity-st)
         '()
         ;; Trimming may result in "no-op" traces. Exclude those.
-        (filter pair?
-                (map (lambda (trace-el)
-                       (try-synth 0 (car trace-el) (cdr trace-el)))
-                     (trim-trace unity-trace unity-st))))))
+        (let* ([new-trace (trim-trace unity-trace unity-st)]
+               [unity-val-arduino-traces (map (lambda (trace-elem)
+                                                (let* ([unity-id (car trace-elem)]
+                                                       [unity-val (cdr trace-elem)]
+                                                       [arduino-trace (try-synth 0 unity-id unity-val)])
+                                                  (cons unity-id arduino-trace)))
+                                              new-trace)]
+               [depsolved-arduino-traces (arduino-traces-depsolver unity-st
+                                                                   unity-val-arduino-traces)])
+          (filter pair?
+                  (begin
+                    (display (format "[unity-trace->arduino-traces] ~a -> ~a~n"
+                                     unity-st
+                                     depsolved-arduino-traces)
+                             (current-error-port))
+                    (map cdr depsolved-arduino-traces)))))))
+
+(define (arduino-traces-depsolver unity-st unity-val-arduino-traces)
+  (let* ([unity-st-symbols (map (lambda (st)
+                                  (cons (car st) (symbolics (cdr st))))
+                                unity-st)])
+
+    (define (check-dep invalid-vals partial-traces)
+      (if (null? partial-traces)
+          #t
+          (let* ([partial-trace (car partial-traces)]
+                 [unity-id (car partial-trace)]
+                 [trace-symbolics (symbolics (cdr partial-trace))]
+                 [trace-invalid? (ormap (lambda (key)
+                                          (symbolic-in-list? key invalid-vals))
+                                        trace-symbolics)]
+                 [vals-to-invalidate (get-mapping unity-id unity-st-symbols)])
+            (and (not trace-invalid?)
+                 (check-dep (append vals-to-invalidate invalid-vals)
+                            (cdr partial-traces))))))
+
+    (let* ([partial-trace-orderings (permutations unity-val-arduino-traces)]
+           [valid-orderings (filter (lambda (t) (check-dep '() t))
+                                    partial-trace-orderings)])
+      (begin
+        (display (format "[arduino-traces-depsolver] ~a valid ordering(s) found~n"
+                         (length valid-orderings))
+                 (current-error-port))
+        (if (pair? valid-orderings)
+            (car valid-orderings)
+            '())))))
+
+(define (arduino-traces->stmt synth-map guard traces snippets)
+  (let ([arduino-cxt (synth-map-target-context synth-map)])
+
+    (define (try-synth trace-elem)
+      (let* ([id (car trace-elem)]
+             [val (cdr trace-elem)]
+             [id-typ (get-mapping id arduino-cxt)]
+             [concrete-expr (try-synth-expr synth-map guard val snippets)])
+        (if (eq? id-typ 'pin-out)
+            (write* id concrete-expr)
+            (:=* id concrete-expr))))
+
+    (flatten
+     (map (lambda (trace)
+            ;; Ordering matters!
+            ;; Statements are evaluated in order, but traces build like a stack
+            ;; So equivalent statements are reversed with regards to their traces
+            (reverse (map try-synth trace)))
+          traces))))
 
 (define (arduino-traces->stmts synth-map guard traces snippets)
   (let ([arduino-cxt (synth-map-target-context synth-map)])
@@ -232,46 +294,6 @@
            ;; So equivalent statements are reversed with regards to their traces
            (reverse (map try-synth trace)))
          traces)))
-
-(define (stmts->ordered-stmt synth-map guard unity-trace stmts)
-  (let* ([start-time (current-seconds)]
-         [ext-vars (synth-map-unity-external-vars synth-map)]
-         [int-vars (synth-map-unity-internal-vars synth-map)]
-         [all-vars (append ext-vars int-vars)]
-         [arduino-cxt (synth-map-target-context synth-map)]
-         [arduino-st->unity-st (synth-map-target-state->unity-state synth-map)]
-         [arduino-st (synth-map-target-state synth-map)]
-         [unity-st (arduino-st->unity-st arduino-st)]
-         [orderings (begin
-                      (clear-asserts!)
-                      (ordering?? (length stmts) stmts))]
-         [sketch (flatten orderings)]
-         [arduino-post-env (interpret-stmt sketch arduino-cxt arduino-st)]
-         [arduino-post-st (environment*-state arduino-post-env)]
-         [post-st-eq? (map-eq-modulo-keys? all-vars
-                                           (arduino-st->unity-st arduino-post-st)
-                                           unity-trace)]
-         [monotonic? (monotonic-keys-ok? ext-vars
-                                         arduino-st
-                                         arduino-post-st
-                                         unity-st
-                                         unity-trace
-                                         arduino-st->unity-st)]
-         [model (synthesize
-                 #:forall arduino-st
-                 #:assume (assert guard)
-                 #:guarantee (assert (and post-st-eq? monotonic?)))]
-         [ordered-stmt (if (sat? model)
-                           (evaluate sketch model)
-                           model)])
-    (begin
-      (display (format "[stmts->ordered-stmt] ~a ~a sec. ~a -> ~a~n"
-                       (sat? model)
-                       (- (current-seconds) start-time)
-                       stmts
-                       ordered-stmt)
-               (current-error-port))
-      ordered-stmt)))
 
 (define (try-synth-decl context)
   (if (null? context)
@@ -389,8 +411,7 @@
          [trace (guarded-trace-trace guarded-tr)]
          [synth-guard (try-synth-expr synth-map assumptions guard '())]
          [synth-traces (unity-trace->arduino-traces synth-map assumptions guard trace)]
-         [synth-stmts (arduino-traces->stmts synth-map guard synth-traces '())]
-         [ordered-stmt (stmts->ordered-stmt synth-map guard trace synth-stmts)])
+         [ordered-stmt (arduino-traces->stmt synth-map guard synth-traces '())])
     (guarded-stmt synth-guard ordered-stmt)))
 
 (define (unity-prog->arduino-prog unity-prog)
