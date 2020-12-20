@@ -1,15 +1,8 @@
 #lang rosette/safe
 
 (require "paxos.rkt"
-         "serial.rkt"
          "synth.rkt"
-         "arduino/backend.rkt"
-         "arduino/syntax.rkt"
-         "arduino/synth.rkt"
-         "arduino/mapping.rkt"
-         "arduino/verify.rkt"
-         "unity/concretize.rkt"
-         rosette/lib/value-browser)
+         "arduino/synth.rkt")
 
 (define proposer-impl
   (arduino*
@@ -1158,9 +1151,14 @@
 ;; (print-arduino-program acceptor-impl)
 
 ;; cpu time: 435624 real time: 2756502 gc time: 125570
-(time
- (unity-prog->arduino-prog proposer))
+;; cpu time: 362027 real time: 4071985 gc time: 85534
+;; (time
+;;  (unity-prog->arduino-prog proposer))
 
 ;; cpu time: 54464 real time: 714941 gc time: 5057
+;; cpu time: 51846 real time: 1113980 gc time: 4697
 ;; (time
 ;;  (unity-prog->arduino-prog acceptor))
+
+(time
+ (unity-prog->arduino-prog mini-test))

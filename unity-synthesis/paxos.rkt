@@ -623,5 +623,40 @@
                    (and* (send-buf-empty?* 'out_prop_val)
                          (=* 'phase 7)))))))))))
 
+(define mini-test
+  (unity*
+   (declare*
+    (list (cons 'ballot 'natural)
+          (cons 'value 'natural)
+          (cons 'phase 'natural)
+          (cons 'prom_bal 'natural)
+          (cons 'prop_mbal 'natural)
+          (cons 'prop_mval 'natural)
+          (cons 'out_prop 'send-channel)
+          (cons 'in_prop 'recv-channel)
+          (cons 'out_prop_bal 'send-buf)
+          (cons 'out_prop_val 'send-buf)
+          (cons 'in_prop_bal 'recv-buf)
+          (cons 'in_prop_val 'recv-buf)))
+   (initially*
+    (list
+     (:=*
+      (list 'phase)
+      (list 0))))
+   (assign*
+    (list
+     (list
+      ;; Phase 2: receive proposal ballot from proposer
+      (:=* (list 'in_prop
+                 'in_prop_bal)
+           (case*
+            (list
+             (cons (list 'empty
+                         (recv-buf-put* 'in_prop_bal (value* 'in_prop)))
+                   (and* (full?* 'in_prop)
+                         (and* (not* (recv-buf-full?* 'in_prop_bal))
+                               (=* 'phase 2))))))))))))
+
 (provide proposer
-         acceptor)
+         acceptor
+         mini-test)
