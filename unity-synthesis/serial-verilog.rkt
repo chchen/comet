@@ -25,7 +25,7 @@
 ;;                                      (guarded-trace-trace g-t)))
 ;;         assign-traces)))
 
-(let* ([prog sender]
+(let* ([prog receiver]
        [synthesized-module (unity-prog->verilog-module prog 'synth-test)]
        [verifier-results (verify-verilog-module prog synthesized-module)])
   (if (verify-ok? verifier-results)

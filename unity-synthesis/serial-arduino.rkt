@@ -16,12 +16,12 @@
 
 (current-bitwidth 9)
 
-(time
-(print-arduino-program
- (unity-prog->arduino-prog channel-fifo)))
+;; (time
+;; (print-arduino-program
+;;  (unity-prog->arduino-prog channel-fifo)))
 
-;; (time (print-arduino-program
-;;        (unity-prog->arduino-prog receiver)))
+(time (print-arduino-program
+       (unity-prog->arduino-prog channel-test)))
 
 ;; (unity-prog->arduino-prog receiver)
 
