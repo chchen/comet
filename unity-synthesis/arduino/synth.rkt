@@ -16,41 +16,24 @@
          ;; unsafe! bee careful
          (only-in racket/list permutations))
 
-(define decomposable-binops
-  (append (list &&
-                ||
-                <=>)
-          (list bvadd
-                bvand
-                bveq
-                bvlshr
-                bvor
-                bvshl
-                bvult
-                bvxor)))
-
-(define decomposable-unops
-  (append (list !)
-          (list bvnot)))
-
-
 (define (try-synth-expr synth-map postulate unity-val extra-snippets)
   (let* ([arduino-cxt (synth-map-target-context synth-map)]
          [arduino-st (synth-map-target-state synth-map)]
          [val (unity:concretize-val unity-val postulate)]
          [val-ids (relevant-ids val arduino-st)]
          [snippets (match val
-                     [(expression op left right)
-                      (if (in-list? op decomposable-binops)
-                          (append (list (try-synth-expr synth-map postulate left extra-snippets)
-                                        (try-synth-expr synth-map postulate right extra-snippets))
-                                  extra-snippets)
-                          extra-snippets)]
-                     [(expression op expr)
-                      (if (in-list? op decomposable-unops)
-                          (append (list (try-synth-expr synth-map postulate expr extra-snippets))
-                                  extra-snippets)
-                          extra-snippets)]
+                     [(expression op args ...)
+                      (if (in-list? op decomposable-ops)
+                          (append
+                           (flatten
+                            (map (lambda (arg)
+                                   (try-synth-expr synth-map postulate arg extra-snippets))
+                                 args))
+                           extra-snippets)
+                          (begin (display (format "[try-synth-expr!] cannot decompose: ~a~n"
+                                                  op)
+                                          (current-error-port))
+                                 extra-snippets))]
                      [_ extra-snippets])])
 
     (define (try-synth exp-depth)

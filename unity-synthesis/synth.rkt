@@ -209,6 +209,21 @@
 
   (helper #t guards))
 
+(define decomposable-ops
+  (append (list !)
+          (list bvnot)
+          (list &&
+                ||
+                <=>)
+          (list bvadd
+                bvand
+                bveq
+                bvlshr
+                bvor
+                bvshl
+                bvult
+                bvxor)))
+
 (provide max-expression-depth
          synth-map
          synth-map-unity-external-vars
@@ -238,4 +253,5 @@
          symbolic-in-list?
          relevant-values
          relevant-ids
-         guards->assumptions)
+         guards->assumptions
+         decomposable-ops)
