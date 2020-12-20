@@ -5,8 +5,6 @@
          "../util.rkt"
          "../bool-bitvec/synth.rkt"
          "../bool-bitvec/types.rkt"
-         "buffer.rkt"
-         "channel.rkt"
          "inversion.rkt"
          "mapping.rkt"
          "semantics.rkt"
@@ -18,39 +16,23 @@
          (prefix-in unity: "../unity/syntax.rkt")
          rosette/lib/match)
 
-(define decomposable-binops
-  (append (list &&
-                ||
-                <=>)
-          (list bvadd
-                bvand
-                bveq
-                bvlshr
-                bvor
-                bvshl
-                bvult
-                bvxor)))
-
-(define decomposable-unops
-  (append (list !)
-          (list bvnot)))
-
 (define (try-synth-expr synth-map postulate unity-val extra-snippets)
   (let* ([target-cxt (synth-map-target-context synth-map)]
          [target-st (synth-map-target-state synth-map)]
          [val (unity:concretize-val unity-val postulate)]
          [snippets (match val
-                     [(expression op left right)
-                      (if (in-list? op decomposable-binops)
-                          (append (list (try-synth-expr synth-map postulate left extra-snippets)
-                                        (try-synth-expr synth-map postulate right extra-snippets))
-                                  extra-snippets)
-                          extra-snippets)]
-                     [(expression op expr)
-                      (if (in-list? op decomposable-unops)
-                          (append (list (try-synth-expr synth-map postulate expr extra-snippets))
-                                  extra-snippets)
-                          extra-snippets)]
+                     [(expression op args ...)
+                      (if (in-list? op decomposable-ops)
+                          (append
+                           (flatten
+                            (map (lambda (arg)
+                                   (try-synth-expr synth-map postulate arg extra-snippets))
+                                 args))
+                           extra-snippets)
+                          (begin (display (format "[try-synth-expr!] cannot decompose: ~a~n"
+                                                  op)
+                                          (current-error-port))
+                                 extra-snippets))]
                      [_ extra-snippets])])
 
     (define (try-synth exp-depth)
@@ -65,29 +47,33 @@
              [model (synthesize
                      #:forall target-st
                      #:assume (assert postulate)
-                     #:guarantee (assert (eq? sketch-val val)))])
+                     #:guarantee (assert (eq? sketch-val val)))]
+             [synth-expr (if (sat? model)
+                             (evaluate sketch model)
+                             model)])
         (begin
-          (display (format "[try-synth-expr] ~a ~a sec. depth: ~a ~a~n"
+          (display (format "[try-synth-expr] ~a ~a sec. depth: ~a ~a -> ~a~n"
                            (sat? model)
                            (- (current-seconds) start-time)
                            exp-depth
-                           val)
+                           val
+                           synth-expr)
                    (current-error-port))
           (if (sat? model)
-              (evaluate sketch model)
+              synth-expr
               (if (>= exp-depth max-expression-depth)
-                  model
+                  synth-expr
                   (try-synth (add1 exp-depth)))))))
 
     (try-synth 0)))
 
-(define (target-trace->target-stmts synth-map guard trace snippets)
+(define (target-trace->target-stmts synth-map guard trace)
   (let ([target-cxt (synth-map-target-context synth-map)])
 
     (define (try-synth trace-elem)
       (let* ([id (car trace-elem)]
              [val (cdr trace-elem)]
-             [expr (try-synth-expr synth-map guard val snippets)])
+             [expr (try-synth-expr synth-map guard val '())])
         (<=* id expr)))
 
     ;; Traces are "list-last", whereas statement ordering is
@@ -96,16 +82,15 @@
     (reverse
      (map try-synth trace))))
 
-(define (unity-guarded-trace->guarded-stmts synth-map guarded-tr snippets)
+(define (unity-guarded-trace->guarded-stmts synth-map guarded-tr assumptions)
   (let* ([guard (guarded-trace-guard guarded-tr)]
          [trace (guarded-trace-trace guarded-tr)]
          [synth-guard
-          (try-synth-expr synth-map #t guard snippets)]
+          (try-synth-expr synth-map assumptions guard '())]
          [synth-trace
-          (unity-trace->target-trace synth-map guard trace)]
+          (unity-trace->target-trace synth-map assumptions guard trace)]
          [synth-stmts
-          (target-trace->target-stmts
-           synth-map guard synth-trace snippets)])
+          (target-trace->target-stmts synth-map guard synth-trace)])
     (guarded-stmt synth-guard
                   synth-stmts)))
 
@@ -121,22 +106,21 @@
                    (guarded-stmts->conditional-stmts tail))))))
 
 (define (unity-prog->always-block synth-map unity-prog)
-  (let* (;; [buf-preds (buffer-predicates unity-prog synth-map)]
-         ;; [chan-preds (channel-predicates unity-prog synth-map)]
-         ;; [preds (append buf-preds chan-preds)]
-         [preds '()]
-         [synth-traces (unity-prog->synth-traces unity-prog synth-map)]
+  (let* ([synth-traces (unity-prog->synth-traces unity-prog synth-map)]
          [initially-trace (synth-traces-initially synth-traces)]
          [assign-traces (synth-traces-assign synth-traces)]
+         [assign-guards (map guarded-trace-guard assign-traces)]
+         [assign-guards-assumptions (guards->assumptions assign-guards)]
          [initially-stmts (unity-guarded-trace->guarded-stmts synth-map
                                                               initially-trace
-                                                              preds)]
+                                                              '())]
          [assign-stmts (map
-                        (lambda (gd-tr)
+                        (lambda (gd-tr gd-as)
                           (unity-guarded-trace->guarded-stmts synth-map
                                                               gd-tr
-                                                              preds))
-                        assign-traces)])
+                                                              gd-as))
+                        assign-traces
+                        assign-guards-assumptions)])
     (always* (or* (posedge* 'clock)
                   (posedge* 'reset))
              (list (if* 'reset

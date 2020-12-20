@@ -18,7 +18,7 @@
 ;; NOTE: This generates a trace that's correct for concurrent models.  For
 ;; sequential correctness, you need to ensure that the synthesized trace
 ;; satisfies the refinement simulation.
-(define (unity-trace->target-trace synth-map unity-guard unity-trace)
+(define (unity-trace->target-trace synth-map assumptions unity-guard unity-trace)
   (let* ([unity-ext-vars (synth-map-unity-external-vars synth-map)]
          [target-id-writable? (synth-map-target-id-writable? synth-map)]
          [target-cxt (synth-map-target-context synth-map)]
@@ -45,7 +45,8 @@
              [mapped-val (unity-id->target-st->unity-val unity-id sketch-trace)]
              [model (synthesize
                      #:forall target-st
-                     #:assume (assert unity-guard)
+                     #:assume (assert (and assumptions
+                                           unity-guard))
                      #:guarantee (assert (eq? mapped-val unity-val)))])
         (begin
           (display (format "[unity-trace->target-trace] ~a ~a sec. depth: ~a uid: ~a ~a -> ~a~n"
