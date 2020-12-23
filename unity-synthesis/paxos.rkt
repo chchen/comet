@@ -47,16 +47,10 @@
     (list
      (:=* (list 'ballot
                 'value
-                'phase
-                'out_a
-                'out_b
-                'out_c)
+                'phase)
           (list 1
                 32
-                1
-                'empty
-                'empty
-                'empty))))
+                1))))
    (assign*
     (list
      (list
@@ -464,13 +458,11 @@
                 'value
                 'phase
                 'prom_bal
-                'out_prop
                 'in_prop_bal)
           (list 0
                 0
                 1
                 0
-                'empty
                 (empty-recv-buf* 8)))))
    (assign*
     (list
