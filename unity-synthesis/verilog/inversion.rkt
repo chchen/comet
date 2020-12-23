@@ -41,10 +41,11 @@
         shr*
         add*))
 
-(define (exp?? depth cxt typ bool-snippets)
-  (let ([bool-terminals (append bool-snippets
+(define (exp?? depth cxt typ snippets)
+  (let ([bool-terminals (append snippets
                                 (boolean-terminals cxt))]
-        [vect-terminals (vector-terminals cxt)])
+        [vect-terminals (append snippets
+                                (vector-terminals cxt))])
 
     (define (boolexp?? depth)
       (let ([terminal-choice (apply choose* bool-terminals)])
@@ -63,16 +64,17 @@
                        v->v->b)))))
 
     (define (vectexp?? depth)
-      (let* ([bool-choice (bool->vect* (apply choose* bool-terminals))]
-             [vect-choice (apply choose* vect-terminals)]
-             [terminal-choice (choose* bool-choice vect-choice)])
+      (let ([boolean-terminal-choice (apply choose* bool-terminals)]
+            [terminal-choice (apply choose* vect-terminals)])
         (if (zero? depth)
             terminal-choice
             (let* ([vect-l (vectexp?? (sub1 depth))]
                    [vect-r (vectexp?? (sub1 depth))]
+                   [b->v (bool->vect* boolean-terminal-choice)]
                    [v->v ((apply choose* vect->vect) vect-l)]
                    [v->v->v ((apply choose* vect->vect->vect) vect-l vect-r)])
               (choose* terminal-choice
+                       b->v
                        v->v
                        v->v->v)))))
 

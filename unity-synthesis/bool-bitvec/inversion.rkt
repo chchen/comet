@@ -6,22 +6,16 @@
          rosette/lib/match
          rosette/lib/synthax)
 
-(define (logical-and l r)
-  (and l r))
-
-(define (logical-or l r)
-  (or l r))
-
 (define bool->bool
-  (list not))
+  (list !))
 
 (define vect->vect
   (list bvnot))
 
 (define bool->bool->bool
-  (list logical-and
-        logical-or
-        eq?))
+  (list &&
+        ||
+        <=>))
 
 (define vect->vect->bool
   (list bveq
