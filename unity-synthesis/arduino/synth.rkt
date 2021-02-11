@@ -259,25 +259,6 @@
             (reverse (map try-synth trace)))
           traces))))
 
-(define (arduino-traces->stmts synth-map guard traces snippets)
-  (let ([arduino-cxt (synth-map-target-context synth-map)])
-
-    (define (try-synth trace-elem)
-      (let* ([id (car trace-elem)]
-             [val (cdr trace-elem)]
-             [id-typ (get-mapping id arduino-cxt)]
-             [concrete-expr (try-synth-expr synth-map guard val snippets)])
-        (if (eq? id-typ 'pin-out)
-            (write* id concrete-expr)
-            (:=* id concrete-expr))))
-
-    (map (lambda (trace)
-           ;; Ordering matters!
-           ;; Statements are evaluated in order, but traces build like a stack
-           ;; So equivalent statements are reversed with regards to their traces
-           (reverse (map try-synth trace)))
-         traces)))
-
 (define (try-synth-decl context)
   (if (null? context)
       '()
@@ -300,44 +281,16 @@
 
 (define (guarded-stmts->setup-stmt synth-map unity-initialize-st guarded-stmt)
   (let* ([start-time (current-seconds)]
-         [ext-vars (synth-map-unity-external-vars synth-map)]
-         [int-vars (synth-map-unity-internal-vars synth-map)]
-         [all-vars (append ext-vars int-vars)]
          [arduino-cxt (synth-map-target-context synth-map)]
-         [arduino-st->unity-st (synth-map-target-state->unity-state synth-map)]
-         [arduino-start-st (synth-map-target-state synth-map)]
-         [unity-start-st (arduino-st->unity-st arduino-start-st)]
          ;; Synthesize declarations
          [declare-stmt (try-synth-decl (reverse arduino-cxt))]
          ;; Check declaration + initialization
-         [initialize-stmt (append declare-stmt
-                                  (guarded-stmt-stmt guarded-stmt))]
-         [arduino-initialize-env (interpret-stmt initialize-stmt '() arduino-start-st)]
-         [arduino-initialize-cxt (environment*-context arduino-initialize-env)]
-         [arduino-initialize-st (environment*-state arduino-initialize-env)]
-         [context-ok? (eq? arduino-initialize-cxt arduino-cxt)]
-         [post-st-eq? (map-eq-modulo-keys? all-vars
-                                           (arduino-st->unity-st arduino-initialize-st)
-                                           unity-initialize-st)]
-         [monotonic? (monotonic-keys-ok? ext-vars
-                                         arduino-start-st
-                                         arduino-initialize-st
-                                         unity-start-st
-                                         unity-initialize-st
-                                         arduino-st->unity-st)]
-         [initialize-model (verify
-                            #:guarantee (assert (and context-ok?
-                                                     post-st-eq?
-                                                     monotonic?)))]
-         [setup-stmt (if (unsat? initialize-model)
-                         initialize-stmt
-                         initialize-model)])
+         [setup-stmt (append declare-stmt
+                             (guarded-stmt-stmt guarded-stmt))])
     (begin
-      (display (format "[guarded-stmts->setup] ~a ~a sec. ~a -> ~a~n"
-                       (unsat? initialize-model)
+      (display (format "[guarded-stmts->setup] ~a sec. ~a~n"
                        (- (current-seconds) start-time)
-                       guarded-stmt
-                       setup-stmt)
+                       guarded-stmt)
                (current-error-port))
       setup-stmt)))
 
@@ -353,41 +306,13 @@
 
 (define (guarded-stmts->loop-stmt synth-map unity-post-st guarded-stmts)
   (let* ([start-time (current-seconds)]
-         [ext-vars (synth-map-unity-external-vars synth-map)]
-         [int-vars (synth-map-unity-internal-vars synth-map)]
-         [all-vars (append ext-vars int-vars)]
-         [arduino-cxt (synth-map-target-context synth-map)]
-         [arduino-st->unity-st (synth-map-target-state->unity-state synth-map)]
-         [arduino-st (synth-map-target-state synth-map)]
-         [unity-st (arduino-st->unity-st arduino-st)]
-         [loop-stmt (guarded-stmts->if-stmt guarded-stmts)]
-         [arduino-post-env (interpret-stmt loop-stmt arduino-cxt arduino-st)]
-         [arduino-post-cxt (environment*-context arduino-post-env)]
-         [arduino-post-st (environment*-state arduino-post-env)]
-         [context-ok? (eq? arduino-post-cxt
-                           arduino-cxt)]
-         [post-st-eq? (map-eq-modulo-keys? all-vars
-                                           (arduino-st->unity-st arduino-post-st)
-                                           unity-post-st)]
-         [monotonic? (monotonic-keys-ok? ext-vars
-                                         arduino-st
-                                         arduino-post-st
-                                         unity-st
-                                         unity-post-st
-                                         arduino-st->unity-st)]
-         [model (verify
-                 #:guarantee (assert (and context-ok?
-                                          post-st-eq?
-                                          monotonic?)))])
+         [loop-stmt (guarded-stmts->if-stmt guarded-stmts)])
     (begin
-      (display (format "[guarded-stmts->loop] ~a ~a sec. ~a~n"
-                       (unsat? model)
+      (display (format "[guarded-stmts->loop] ~a sec. ~a~n"
                        (- (current-seconds) start-time)
                        guarded-stmts)
                (current-error-port))
-      (if (unsat? model)
-          loop-stmt
-          model))))
+      loop-stmt)))
 
 (define (unity-guarded-trace->guarded-stmt synth-map guarded-tr assumptions)
   (let* ([guard (guarded-trace-guard guarded-tr)]

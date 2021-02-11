@@ -2,7 +2,9 @@
 
 (require "paxos.rkt"
          "synth.rkt"
-         "arduino/synth.rkt")
+         "arduino/syntax.rkt"
+         "arduino/synth.rkt"
+         "arduino/verify.rkt")
 
 (define proposer-impl
   (arduino*
@@ -1144,6 +1146,49 @@
                                 (list (:=* 'phase (bv #x00 8)))
                                 '())))))))))))))))))))))))))))))))
 
+(define mini-test-impl
+  (arduino*
+   (setup*
+    (list
+     (byte* 'ballot)
+     (byte* 'value)
+     (byte* 'phase)
+     (byte* 'prom_bal)
+     (byte* 'prop_mbal)
+     (byte* 'prop_mval)
+     (pin-mode* 'd2 'OUTPUT)
+     (pin-mode* 'd1 'INPUT)
+     (pin-mode* 'd0 'OUTPUT)
+     (pin-mode* 'd5 'INPUT)
+     (pin-mode* 'd4 'OUTPUT)
+     (pin-mode* 'd3 'INPUT)
+     (byte* 'out_prop_bal_vals)
+     (byte* 'out_prop_bal_sent)
+     (byte* 'out_prop_val_vals)
+     (byte* 'out_prop_val_sent)
+     (byte* 'in_prop_bal_vals)
+     (byte* 'in_prop_bal_rcvd)
+     (byte* 'in_prop_val_vals)
+     (byte* 'in_prop_val_rcvd)
+     (:=* 'phase (bv #x00 8))))
+   (loop*
+    (list
+     (if*
+      (and*
+       (shl* (eq* (bv #x02 8) 'phase) 'in_prop_bal_rcvd)
+       (bwxor* (read* 'd4) (read* 'd3)))
+      (list
+       (:=*
+        'in_prop_bal_vals
+        (bwxor*
+         (bwor*
+          (bwxor* 'in_prop_bal_vals (bv #xff 8))
+          (shl* (bv #x01 8) 'in_prop_bal_rcvd))
+         (bwxor* (shl* (read* 'd5) 'in_prop_bal_rcvd) (bv #xff 8))))
+       (:=* 'in_prop_bal_rcvd (add* (bv #x01 8) 'in_prop_bal_rcvd))
+       (write* 'd4 (read* 'd3)))
+      '())))))
+
 (current-bitwidth 9)
 
 ;; (print-arduino-program proposer-impl)
@@ -1160,5 +1205,21 @@
 ;; (time
 ;;  (unity-prog->arduino-prog acceptor))
 
-(time
- (unity-prog->arduino-prog mini-test))
+;; (let* ([prog mini-test]
+;;        [impl (time (unity-prog->arduino-prog prog))])
+;;   (time (list impl
+;;               (verify-arduino-prog prog impl))))
+
+;; synth cpu time: 290554 real time: 4019873 gc time: 79792
+;; verify cpu time: 1496362 real time: 1928454 gc time: 1271628
+;; (let* ([prog proposer]
+;;        [impl (time (unity-prog->arduino-prog prog))])
+;;   (time (list impl
+;;               (verify-arduino-prog prog impl))))
+
+;; synth cpu time: 40977 real time: 985260 gc time: 4208
+;; verify cpu time: 21268 real time: 86058 gc time: 10781
+;; (let* ([prog acceptor]
+;;        [impl (time (unity-prog->arduino-prog prog))])
+;;   (time (list impl
+;;               (verify-arduino-prog prog impl))))
