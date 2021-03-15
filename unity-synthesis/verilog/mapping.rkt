@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "../synth.rkt"
+(require "../config.rkt"
+         "../synth.rkt"
          "../util.rkt"
          "../bool-bitvec/types.rkt"
          "symbolic.rkt"

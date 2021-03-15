@@ -30,12 +30,13 @@
   (unity*
    (declare*
     (list (cons 'in-read 'boolean)
+          (cons 'wig-wag 'boolean)
           (cons 'in 'recv-channel)
           (cons 'out 'send-channel)))
    (initially*
     (list
-     (:=* (list 'in-read)
-          (list #f))))
+     (:=* (list 'in-read 'wig-wag)
+          (list #f #f))))
    (assign*
     (list
      ;; Each parallel assignment is independent. A parallel composition of
@@ -47,13 +48,27 @@
       ;; mutually exclusive, that is, if A contains guards g1 and g2, then (and
       ;; g1 g2) == unsat
       (:=* (list 'in-read
+                 'wig-wag
                  'out)
            (case* (list (cons (list #t
+                                    (not* 'wig-wag)
                                     (message* (value* 'in)))
-                              (and* (not* 'in-read)
-                                    (and* (empty?* 'out)
-                                          (full?* 'in)))))))
+                              (and* 'wig-wag
+                                    (and* (not* 'in-read)
+                                          (and* (empty?* 'out)
+                                                (full?* 'in))))))))
       ;; parallel assignment B
+      (:=* (list 'in-read
+                 'wig-wag
+                 'out)
+           (case* (list (cons (list #t
+                                    (not* 'wig-wag)
+                                    (message* (value* 'in)))
+                              (and* (not* 'wig-wag)
+                                    (and* (not* 'in-read)
+                                          (and* (empty?* 'out)
+                                                (full?* 'in))))))))
+      ;; parallel assignment C
       (:=* (list 'in-read
                  'in)
            (case* (list (cons (list #f

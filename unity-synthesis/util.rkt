@@ -2,6 +2,10 @@
 
 (require rosette/lib/match)
 
+(define (eq-symbolic? a b)
+  (and (eq? a b)
+       (not (term? (eq? a b)))))
+
 (define (equal-length? a b)
   (and (list? a)
        (list? b)
@@ -25,6 +29,13 @@
   (match (assoc key mapping)
     [(cons _ val) val]
     [_ null]))
+
+(define (get-mapping-symbolic key mapping default)
+  (if (null? mapping)
+      default
+      (if (eq-symbolic? key (caar mapping))
+          (cdar mapping)
+          (get-mapping-symbolic key (cdr mapping) default))))
 
 (define (add-mapping key val mapping)
   (cons (cons key val)
@@ -87,11 +98,13 @@
 
   (helper lst '()))
 
-(provide equal-length?
+(provide eq-symbolic?
+         equal-length?
          in-list?
          mapping?
          add-mapping
          get-mapping
+         get-mapping-symbolic
          subset-mapping
          inverse-subset-mapping
          keys

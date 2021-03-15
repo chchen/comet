@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "serial.rkt"
+(require "config.rkt"
+         "serial.rkt"
          "synth.rkt"
          "bool-bitvec/synth.rkt"
          "verilog/backend.rkt"
@@ -25,17 +26,17 @@
 ;;                                      (guarded-trace-trace g-t)))
 ;;         assign-traces)))
 
-(let* ([prog receiver]
-       [synthesized-module (unity-prog->verilog-module prog 'synth-test)]
-       [verifier-results (verify-verilog-module prog synthesized-module)])
-  (if (verify-ok? verifier-results)
-      (print-verilog-module synthesized-module)
-      verifier-results))
+;; (let* ([prog receiver]
+;;        [synthesized-module (unity-prog->verilog-module prog 'synth-test)]
+;;        [verifier-results (verify-verilog-module prog synthesized-module)])
+;;   (if (verify-ok? verifier-results)
+;;       (print-verilog-module synthesized-module)
+;;       verifier-results))
 
-;; (time
-;;  (let* ([prog channel-test]
-;;         [synth-map (unity-prog->synth-map prog)])
-;;    (unity-prog->always-block synth-map prog)))
+(time
+ (let* ([prog channel-test]
+        [synth-map (unity-prog->synth-map prog)])
+   (unity-prog->always-block synth-map prog)))
 
 ;; (time
 ;;  (let* ([prog channel-test]

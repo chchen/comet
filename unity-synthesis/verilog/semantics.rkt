@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "../environment.rkt"
+(require "../config.rkt"
+         "../environment.rkt"
          "../util.rkt"
          "../bool-bitvec/types.rkt"
          "syntax.rkt"

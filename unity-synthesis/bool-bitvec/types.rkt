@@ -1,6 +1,6 @@
 #lang rosette/safe
 
-(define vect-len 8)
+(require "../config.rkt")
 
 (define vect?
   (bitvector vect-len))
@@ -8,6 +8,5 @@
 (define (bool->vect b)
   (bool->bitvector b vect-len))
 
-(provide vect-len
-         vect?
+(provide vect?
          bool->vect)

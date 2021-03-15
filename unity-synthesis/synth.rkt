@@ -168,10 +168,8 @@
 (define (symbolic-in-list? k l)
   (if (null? l)
       #f
-      (let ([eqv (eq? k (car l))])
-        (or (and (not (term? eqv))
-                 eqv)
-            (symbolic-in-list? k (cdr l))))))
+      (or (eq-symbolic? k (car l))
+          (symbolic-in-list? k (cdr l)))))
 
 ;; Find the relevant target-vals to unity-val, Looking for target-vals that
 ;; share common symbolic variables with the unity-val

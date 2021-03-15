@@ -82,17 +82,39 @@
     (reverse
      (map try-synth trace))))
 
-(define (unity-guarded-trace->guarded-stmts synth-map guarded-tr assumptions)
+(define (unity-guarded-trace->guarded-stmt synth-map assumptions guarded-tr)
   (let* ([guard (guarded-trace-guard guarded-tr)]
          [trace (guarded-trace-trace guarded-tr)]
          [synth-guard
           (try-synth-expr synth-map assumptions guard '())]
-         [synth-trace
-          (unity-trace->target-trace synth-map assumptions guard trace)]
+         [memoized-synth-trace
+          (unity-trace->memoized-target-trace synth-map assumptions '() guard trace)]
          [synth-stmts
-          (target-trace->target-stmts synth-map guard synth-trace)])
+          (target-trace->target-stmts synth-map guard (cdr memoized-synth-trace))])
     (guarded-stmt synth-guard
                   synth-stmts)))
+
+(define (unity-guarded-traces->guarded-stmts synth-map guard-assumptions guarded-trs)
+  (define (helper g-trs g-ass memos)
+    (if (null? g-trs)
+        '()
+        (let* ([guarded-tr (car g-trs)]
+               [assumptions (car g-ass)]
+               [guard (guarded-trace-guard guarded-tr)]
+               [trace (guarded-trace-trace guarded-tr)]
+               [synth-guard
+                (try-synth-expr synth-map assumptions guard '())]
+               [memoized-synth-trace
+                (unity-trace->memoized-target-trace synth-map assumptions memos guard trace)]
+               [synth-stmts
+                (target-trace->target-stmts synth-map guard (cdr memoized-synth-trace))])
+          (cons (guarded-stmt synth-guard
+                              synth-stmts)
+                (helper (cdr g-trs)
+                        (cdr g-ass)
+                        (car memoized-synth-trace))))))
+
+  (helper guarded-trs guard-assumptions '()))
 
 (define (guarded-stmts->conditional-stmts guarded-stmts)
   (if (null? guarded-stmts)
@@ -111,16 +133,12 @@
          [assign-traces (synth-traces-assign synth-traces)]
          [assign-guards (map guarded-trace-guard assign-traces)]
          [assign-guards-assumptions (guards->assumptions assign-guards)]
-         [initially-stmts (unity-guarded-trace->guarded-stmts synth-map
-                                                              initially-trace
-                                                              '())]
-         [assign-stmts (map
-                        (lambda (gd-tr gd-as)
-                          (unity-guarded-trace->guarded-stmts synth-map
-                                                              gd-tr
-                                                              gd-as))
-                        assign-traces
-                        assign-guards-assumptions)])
+         [initially-stmts (unity-guarded-trace->guarded-stmt synth-map
+                                                              '()
+                                                              initially-trace)]
+         [assign-stmts (unity-guarded-traces->guarded-stmts synth-map
+                                                            assign-guards-assumptions
+                                                            assign-traces)])
     (always* (or* (posedge* 'clock)
                   (posedge* 'reset))
              (list (if* 'reset
@@ -152,6 +170,7 @@
 
 (provide try-synth-expr
          target-trace->target-stmts
-         unity-guarded-trace->guarded-stmts
+         unity-guarded-trace->guarded-stmt
+         unity-guarded-traces->guarded-stmts
          unity-prog->always-block
          unity-prog->verilog-module)

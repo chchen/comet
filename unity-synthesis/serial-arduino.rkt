@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "serial.rkt"
+(require "config.rkt"
+         "serial.rkt"
          "synth.rkt"
          "arduino/backend.rkt"
          "arduino/synth.rkt"
@@ -14,16 +15,14 @@
 ;;         [verify-model (verify-loop prog sketch synth-map)])
 ;;    verify-model))
 
-(current-bitwidth 9)
-
 ;; (time
 ;; (print-arduino-program
 ;;  (unity-prog->arduino-prog channel-fifo)))
 
-(time (print-arduino-program
-       (unity-prog->arduino-prog channel-test)))
+;; (time (print-arduino-program
+;;        (unity-prog->arduino-prog channel-test)))
 
-;; (unity-prog->arduino-prog receiver)
+(unity-prog->arduino-prog channel-test)
 
 ;; (verify-arduino-prog channel-recv-buf-test
 ;;                      channel-recv-buf-impl)
@@ -42,6 +41,6 @@
 ;;    (unity-prog->assign-state prog synth-map)))
 
 ;; (time
-;;  (let* ([prog receiver]
+;;  (let* ([prog channel-test]
 ;;         [synth-map (unity-prog->synth-map prog)])
 ;;    (unity-prog->synth-traces prog synth-map)))

@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "unity/syntax.rkt")
+(require "config.rkt"
+         "unity/syntax.rkt")
 
 ;; Model a Paxos proposer
 ;; A proposer sends phase 1a and 2a and receives phase 1b and 2b messages
@@ -67,9 +68,9 @@
                  'out_c_bal
                  'phase)
            (case*
-            (list (cons (list (nat->send-buf* 8 'ballot)
-                              (nat->send-buf* 8 'ballot)
-                              (nat->send-buf* 8 'ballot)
+            (list (cons (list (nat->send-buf* vect-len 'ballot)
+                              (nat->send-buf* vect-len 'ballot)
+                              (nat->send-buf* vect-len 'ballot)
                               2)
                         (=* 'phase 1)))))
       ;; 03 Phase 2: send promise message to acceptors
@@ -111,12 +112,12 @@
                  'in_c_val
                  'phase)
            (case*
-            (list (cons (list (empty-recv-buf* 8)
-                              (empty-recv-buf* 8)
-                              (empty-recv-buf* 8)
-                              (empty-recv-buf* 8)
-                              (empty-recv-buf* 8)
-                              (empty-recv-buf* 8)
+            (list (cons (list (empty-recv-buf* vect-len)
+                              (empty-recv-buf* vect-len)
+                              (empty-recv-buf* vect-len)
+                              (empty-recv-buf* vect-len)
+                              (empty-recv-buf* vect-len)
+                              (empty-recv-buf* vect-len)
                               3)
                         (and* (send-buf-empty?* 'out_a_bal)
                               (and* (send-buf-empty?* 'out_b_bal)
@@ -248,12 +249,12 @@
                  'out_c_val
                  'phase)
            (case*
-            (list (cons (list (nat->send-buf* 8 'ballot)
-                              (nat->send-buf* 8 'ballot)
-                              (nat->send-buf* 8 'ballot)
-                              (nat->send-buf* 8 'value)
-                              (nat->send-buf* 8 'value)
-                              (nat->send-buf* 8 'value)
+            (list (cons (list (nat->send-buf* vect-len 'ballot)
+                              (nat->send-buf* vect-len 'ballot)
+                              (nat->send-buf* vect-len 'ballot)
+                              (nat->send-buf* vect-len 'value)
+                              (nat->send-buf* vect-len 'value)
+                              (nat->send-buf* vect-len 'value)
                               6)
                         (=* 'phase 5)))))
       ;; Phase 6: send vote message to acceptors
@@ -326,12 +327,12 @@
                  'in_c_val
                  'phase)
            (case*
-            (list (cons (list (empty-recv-buf* 8)
-                              (empty-recv-buf* 8)
-                              (empty-recv-buf* 8)
-                              (empty-recv-buf* 8)
-                              (empty-recv-buf* 8)
-                              (empty-recv-buf* 8)
+            (list (cons (list (empty-recv-buf* vect-len)
+                              (empty-recv-buf* vect-len)
+                              (empty-recv-buf* vect-len)
+                              (empty-recv-buf* vect-len)
+                              (empty-recv-buf* vect-len)
+                              (empty-recv-buf* vect-len)
                               7)
                         (and* (send-buf-empty?* 'out_a_val)
                               (and* (send-buf-empty?* 'out_b_val)
@@ -463,7 +464,7 @@
                 0
                 1
                 0
-                (empty-recv-buf* 8)))))
+                (empty-recv-buf* vect-len)))))
    (assign*
     (list
      (list
@@ -474,7 +475,7 @@
                  'phase)
            (case*
             (list
-             (cons (list (empty-recv-buf* 8)
+             (cons (list (empty-recv-buf* vect-len)
                          2)
                    (=* 'phase 1)))))
       ;; Phase 2: receive proposal ballot from proposer
@@ -504,8 +505,8 @@
                  'phase)
            (case*
             (list
-             (cons (list (nat->send-buf* 8 'ballot)
-                         (nat->send-buf* 8 'value)
+             (cons (list (nat->send-buf* vect-len 'ballot)
+                         (nat->send-buf* vect-len 'value)
                          'prop_mbal
                          4)
                    (and* (<* 'ballot
@@ -538,8 +539,8 @@
                  'phase)
            (case*
             (list
-             (cons (list (empty-recv-buf* 8)
-                         (empty-recv-buf* 8)
+             (cons (list (empty-recv-buf* vect-len)
+                         (empty-recv-buf* vect-len)
                          5)
                    (and* (send-buf-empty?* 'out_prop_val)
                          (=* 'phase 4))))))
@@ -583,8 +584,8 @@
             (list
              (cons (list 'prop_mbal
                          'prop_mval
-                         (nat->send-buf* 8 'prop_mbal)
-                         (nat->send-buf* 8 'prop_mval)
+                         (nat->send-buf* vect-len 'prop_mbal)
+                         (nat->send-buf* vect-len 'prop_mval)
                          7)
                    (and* (=* 'prop_mbal 'prom_bal)
                          (=* 'phase 6))))))
@@ -618,18 +619,9 @@
 (define mini-test
   (unity*
    (declare*
-    (list (cons 'ballot 'natural)
-          (cons 'value 'natural)
-          (cons 'phase 'natural)
-          (cons 'prom_bal 'natural)
-          (cons 'prop_mbal 'natural)
-          (cons 'prop_mval 'natural)
-          (cons 'out_prop 'send-channel)
+    (list (cons 'phase 'natural)
           (cons 'in_prop 'recv-channel)
-          (cons 'out_prop_bal 'send-buf)
-          (cons 'out_prop_val 'send-buf)
-          (cons 'in_prop_bal 'recv-buf)
-          (cons 'in_prop_val 'recv-buf)))
+          (cons 'in_prop_bal 'recv-buf)))
    (initially*
     (list
      (:=*
@@ -638,6 +630,16 @@
    (assign*
     (list
      (list
+      ;; Phase 0: Accepting state
+      ;; Phase 255: Failure state
+      ;; Phase 1->2: prepare receive buffers
+      (:=* (list 'in_prop_bal
+                 'phase)
+           (case*
+            (list
+             (cons (list (empty-recv-buf* vect-len)
+                         2)
+                   (=* 'phase 1)))))
       ;; Phase 2: receive proposal ballot from proposer
       (:=* (list 'in_prop
                  'in_prop_bal)

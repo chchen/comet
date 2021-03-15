@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "paxos.rkt"
+(require "config.rkt"
+         "paxos.rkt"
          "synth.rkt"
          "arduino/syntax.rkt"
          "arduino/synth.rkt"
@@ -1189,8 +1190,6 @@
        (write* 'd4 (read* 'd3)))
       '())))))
 
-(current-bitwidth 9)
-
 ;; (print-arduino-program proposer-impl)
 
 ;; (print-arduino-program acceptor-impl)
@@ -1223,3 +1222,7 @@
 ;;        [impl (time (unity-prog->arduino-prog prog))])
 ;;   (time (list impl
 ;;               (verify-arduino-prog prog impl))))
+
+;; (output-smt "/Users/cchen/Desktop/smt")
+(time
+ (unity-prog->arduino-prog mini-test))
