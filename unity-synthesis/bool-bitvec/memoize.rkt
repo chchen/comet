@@ -5,6 +5,14 @@
          (prefix-in unity: "../unity/syntax.rkt")
          rosette/lib/match)
 
+;; A valid substitution is a function from variables to variables
+;; An invalid substitution maps a variable to two different variables
+(define (valid-substitution? subst)
+  (let* ([unique-subst (remove-duplicates subst eq-symbolic?)]
+         [keys (map car unique-subst)])
+    (= (length keys)
+       (length (symbolics keys)))))
+
 (define (typed-alpha-equiv left right)
   (match left
     [(constant l-ident l-typ)
@@ -99,14 +107,21 @@
       (let* ([unity-val (caar memos)]
              [target-val (cdar memos)]
              [unification (typed-alpha-equiv unity-val key)])
-        (if (member 'fail unification)
+        (if (or (member 'fail unification)
+                (not (valid-substitution? unification)))
             (try-memo key (cdr memos))
             (apply-subst target-val unification)))))
 
-;; (define-symbolic d2 d4 d5 boolean?)
+;; (define-symbolic d2 d3 d4 d5 boolean?)
 ;; (try-memo (unity:channel* #t d2)
 ;;           (list (list #t #t)
 ;;                 (list #f #f)
 ;;                 (list (unity:channel* #t d4) (! d5) d4)))
+
+;; (valid-substitution?
+;;  (typed-alpha-equiv (list (unity:channel* #t d2)
+;;                           (unity:channel* #t d3))
+;;                     (list (unity:channel* #t d4)
+;;                           (unity:channel* #t d5))))
 
 (provide try-memo)
