@@ -2,9 +2,10 @@
 
 (require rosette/lib/match)
 
-(define (eq-symbolic? a b)
-  (and (eq? a b)
-       (not (term? (eq? a b)))))
+(define (concrete-eq? a b)
+  (let ([val (eq? a b)])
+    (and val
+         (concrete? val))))
 
 (define (equal-length? a b)
   (and (list? a)
@@ -33,7 +34,7 @@
 (define (get-mapping-symbolic key mapping default)
   (if (null? mapping)
       default
-      (if (eq-symbolic? key (caar mapping))
+      (if (concrete-eq? key (caar mapping))
           (cdar mapping)
           (get-mapping-symbolic key (cdr mapping) default))))
 
@@ -98,7 +99,12 @@
 
   (helper lst '()))
 
-(provide eq-symbolic?
+;; Verification condition wrapper for expression, leaving current vc unchanged
+(define-syntax vc-wrapper
+  (syntax-rules ()
+    [(vc-wrapper expr) (result-value (with-vc expr))]))
+
+(provide concrete-eq?
          equal-length?
          in-list?
          mapping?
@@ -112,4 +118,5 @@
          map-eq-modulo-keys?
          type-in-context
          pretty-indent
-         prefixes)
+         prefixes
+         vc-wrapper)

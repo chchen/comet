@@ -29,41 +29,31 @@
                                    (try-synth-expr synth-map postulate arg extra-snippets))
                                  args))
                            extra-snippets)
-                          (begin (display (format "[try-synth-expr!] cannot decompose: ~a~n"
-                                                  op)
-                                          (current-error-port))
-                                 extra-snippets))]
+                          extra-snippets)]
                      [_ extra-snippets])])
 
     (define (try-synth exp-depth)
-      (let* ([start-time (current-seconds)]
-             [val-type (cond
-                         [(boolean? val) boolean?]
-                         [(vect? val) vect?])]
-             [sketch (begin
-                       (clear-asserts!)
-                       (exp?? exp-depth target-cxt val-type snippets))]
-             [sketch-val (evaluate-expr sketch target-st)]
-             [model (synthesize
-                     #:forall target-st
-                     #:assume (assert postulate)
-                     #:guarantee (assert (eq? sketch-val val)))]
-             [synth-expr (if (sat? model)
-                             (evaluate sketch model)
-                             model)])
-        (begin
-          (display (format "[try-synth-expr] ~a ~a sec. depth: ~a ~a -> ~a~n"
-                           (sat? model)
-                           (- (current-seconds) start-time)
-                           exp-depth
-                           val
-                           synth-expr)
-                   (current-error-port))
-          (if (sat? model)
-              synth-expr
-              (if (>= exp-depth max-expression-depth)
-                  synth-expr
-                  (try-synth (add1 exp-depth)))))))
+      (with-terms
+        (vc-wrapper
+
+         (let* ([start-time (current-seconds)]
+                [val-type (cond
+                            [(boolean? val) boolean?]
+                            [(vect? val) vect?])]
+                [sketch (exp?? exp-depth target-cxt val-type snippets)]
+                [sketch-val (evaluate-expr sketch target-st)]
+                [model (synthesize
+                        #:forall target-st
+                        #:guarantee (begin (assume postulate)
+                                           (assert (eq? sketch-val val))))]
+                [synth-expr (if (sat? model)
+                                (evaluate sketch model)
+                                model)])
+           (if (sat? model)
+               synth-expr
+               (if (>= exp-depth max-expression-depth)
+                   synth-expr
+                   (try-synth (add1 exp-depth))))))))
 
     (try-synth 0)))
 
@@ -88,7 +78,7 @@
          [synth-guard
           (try-synth-expr synth-map assumptions guard '())]
          [memoized-synth-trace
-          (unity-trace->memoized-target-trace synth-map assumptions '() guard trace)]
+          (unity-trace->memoized-target-trace synth-map '() guard trace)]
          [synth-stmts
           (target-trace->target-stmts synth-map guard (cdr memoized-synth-trace))])
     (guarded-stmt synth-guard
@@ -105,7 +95,7 @@
                [synth-guard
                 (try-synth-expr synth-map assumptions guard '())]
                [memoized-synth-trace
-                (unity-trace->memoized-target-trace synth-map assumptions memos guard trace)]
+                (unity-trace->memoized-target-trace synth-map memos guard trace)]
                [synth-stmts
                 (target-trace->target-stmts synth-map guard (cdr memoized-synth-trace))])
           (cons (guarded-stmt synth-guard

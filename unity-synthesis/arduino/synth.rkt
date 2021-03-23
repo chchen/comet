@@ -1,6 +1,7 @@
 #lang rosette/safe
 
 (require "../environment.rkt"
+         "../symbolic.rkt"
          "../synth.rkt"
          "../util.rkt"
          "inversion.rkt"
@@ -30,41 +31,28 @@
                                    (try-synth-expr synth-map postulate arg extra-snippets))
                                  args))
                            extra-snippets)
-                          (begin (display (format "[try-synth-expr!] cannot decompose: ~a~n"
-                                                  op)
-                                          (current-error-port))
-                                 extra-snippets))]
+                          extra-snippets)]
                      [_ extra-snippets])])
 
     (define (try-synth exp-depth)
-      (let* ([start-time (current-seconds)]
-             [sketch (begin
-                       (clear-asserts!)
-                       (exp-modulo-idents?? exp-depth arduino-cxt snippets val-ids))]
-             [sketch-val (evaluate-expr sketch arduino-cxt arduino-st)]
-             [model (synthesize
-                     #:forall arduino-st
-                     #:assume (assert postulate)
-                     #:guarantee (assert (eq? (if (boolean? val)
-                                                  (bitvector->bool sketch-val)
-                                                  sketch-val)
-                                              val)))])
-        (begin
-          (display (format "[try-synth-expr] ~a ~a sec. depth: ~a ~a -> ~a -> ~a~n"
-                           (sat? model)
-                           (- (current-seconds) start-time)
-                           exp-depth
-                           val-ids
-                           val
-                           (if (sat? model)
-                               (evaluate sketch model)
-                               model))
-                   (current-error-port))
-          (if (sat? model)
-              (evaluate sketch model)
-              (if (>= exp-depth max-expression-depth)
-                  model
-                  (try-synth (add1 exp-depth)))))))
+      (with-terms
+        (vc-wrapper
+         (let* ([start-time (current-seconds)]
+                [sketch (exp-modulo-idents?? exp-depth arduino-cxt snippets val-ids)]
+                [sketch-val (evaluate-expr sketch arduino-cxt arduino-st)]
+                [model (synthesize
+                        #:forall arduino-st
+                        #:guarantee (begin
+                                      (assume postulate)
+                                      (assert (eq? (if (boolean? val)
+                                                       (bitvector->bool sketch-val)
+                                                       sketch-val)
+                                                   val))))])
+           (if (sat? model)
+               (evaluate sketch model)
+               (if (>= exp-depth max-expression-depth)
+                   model
+                   (try-synth (add1 exp-depth))))))))
 
     (try-synth 0)))
 
@@ -100,7 +88,7 @@
       (cons (car trace)
             (trim-trace (cdr trace) tail))))
 
-(define (unity-trace->arduino-traces synth-map assumptions unity-guard unity-trace)
+(define (unity-trace->arduino-traces synth-map unity-guard unity-trace)
   (let* ([arduino-cxt (synth-map-target-context synth-map)]
          [arduino-st->unity-st (synth-map-target-state->unity-state synth-map)]
          [unity-id->arduino-st->unity-val
@@ -110,89 +98,90 @@
          [unity-st (arduino-st->unity-st arduino-st)])
 
     (define (try-synth depth unity-id unity-val)
-      (let* ([start-time (current-seconds)]
-             [arduino-ids (unity-id->arduino-ids unity-id)]
-             [arduino-id-vals (map (lambda (i)
-                                     (get-mapping i arduino-st))
-                                   arduino-ids)]
-             [extra-arduino-st (filter (lambda (k-v)
-                                         (not (member (car k-v) arduino-ids)))
-                                       arduino-st)]
-             [extra-arduino-vals (relevant-values unity-val
-                                                  (map cdr extra-arduino-st))]
-             [relevant-vals (append arduino-id-vals extra-arduino-vals)]
-             [sketch-st (begin
-                          (clear-asserts!)
-                          (state?? arduino-ids relevant-vals depth arduino-cxt arduino-st))]
-             [mapped-val (unity-id->arduino-st->unity-val unity-id sketch-st)]
-             [model (synthesize
-                     #:forall arduino-st
-                     #:assume (assert (and assumptions
-                                           unity-guard))
-                     #:guarantee (assert (eq? mapped-val unity-val)))]
-             [arduino-trace (if (sat? model)
-                                    (trim-trace (evaluate sketch-st model)
-                                                arduino-st)
-                                    model)])
-        (begin
-          (display (format "[unity-trace->arduino-trace] ~a ~a sec. depth: ~a uid: ~a ~a -> ~a~n"
-                           (sat? model)
-                           (- (current-seconds) start-time)
-                           depth
-                           unity-id
-                           relevant-vals
-                           arduino-trace)
-                   (current-error-port))
-          (if (sat? model)
-              (try-trim-ordering 0 arduino-trace unity-id unity-val)
-              (if (>= depth max-expression-depth)
-                  model
-                  (try-synth (add1 depth) unity-id unity-val))))))
+      (with-terms
+        (vc-wrapper
+         (let* ([start-time (current-seconds)]
+                [arduino-ids (unity-id->arduino-ids unity-id)]
+                [arduino-id-vals (map (lambda (i)
+                                        (get-mapping i arduino-st))
+                                      arduino-ids)]
+                [extra-arduino-st (filter (lambda (k-v)
+                                            (not (member (car k-v) arduino-ids)))
+                                          arduino-st)]
+                [extra-arduino-vals (relevant-values unity-val
+                                                     (map cdr extra-arduino-st))]
+                [relevant-vals (append arduino-id-vals extra-arduino-vals)]
+                [sketch-st (state?? arduino-ids relevant-vals depth arduino-cxt arduino-st)]
+                [mapped-val (unity-id->arduino-st->unity-val unity-id sketch-st)]
+                [model (synthesize
+                        #:forall arduino-st
+                        #:guarantee (begin
+                                      (assume unity-guard)
+                                      (assert (eq? mapped-val unity-val))))]
+                [arduino-trace (if (sat? model)
+                                   (trim-trace (evaluate sketch-st model)
+                                               arduino-st)
+                                   model)])
+           (begin
+             (display (format "[unity-trace->arduino-trace] ~a ~a sec. depth: ~a uid: ~a ~a -> ~a~n"
+                              (sat? model)
+                              (- (current-seconds) start-time)
+                              depth
+                              unity-id
+                              relevant-vals
+                              arduino-trace)
+                      (current-error-port))
+             (if (sat? model)
+                 (try-trim-ordering 0 arduino-trace unity-id unity-val)
+                 (if (>= depth max-expression-depth)
+                     model
+                     (try-synth (add1 depth) unity-id unity-val))))))))
 
     (define (try-trim-ordering len synthesized-trace unity-id unity-val)
-      (let* ([start-time (current-seconds)]
-             [ext-vars (synth-map-unity-external-vars synth-map)]
-             [valid-orderings (valid-trace-orderings synthesized-trace arduino-st)]
-             [trace-ordering (begin
-                               (clear-asserts!)
-                               (ordering?? len synthesized-trace))]
-             [sketch-st (append trace-ordering arduino-st)]
-             [mapped-val (unity-id->arduino-st->unity-val unity-id sketch-st)]
-             [post-st-eq? (eq? mapped-val unity-val)]
-             [valid-ordering? (in-list? trace-ordering valid-orderings)]
-             [monotonic? (if (in-list? unity-id ext-vars)
-                             (monotonic-keys-ok? (list unity-id)
-                                                 arduino-st
-                                                 sketch-st
-                                                 unity-st
-                                                 unity-trace
-                                                 arduino-st->unity-st)
-                             #t)]
-             [model (synthesize
-                     #:forall arduino-st
-                     #:assume (assert unity-guard)
-                     #:guarantee (assert (and post-st-eq? valid-ordering? monotonic?)))]
-             [ordered-trace (if (sat? model)
-                                (evaluate trace-ordering model)
-                                model)])
-        (begin
-          (display (format "[try-trim-ordering] ~a ~a sec. length: ~a ~a -> ~a~n"
-                           (sat? model)
-                           (- (current-seconds) start-time)
-                           len
-                           synthesized-trace
-                           ordered-trace)
-                   (current-error-port))
-          (if (sat? model)
-              ordered-trace
-              (if (>= len (length synthesized-trace))
-                  ordered-trace
-                  (try-trim-ordering (add1 len) synthesized-trace unity-id unity-val))))))
+      (with-terms
+        (vc-wrapper
+         (let* ([start-time (current-seconds)]
+                [ext-vars (synth-map-unity-external-vars synth-map)]
+                [valid-orderings (valid-trace-orderings synthesized-trace arduino-st)]
+                [trace-ordering (ordering?? len synthesized-trace)]
+                [sketch-st (append trace-ordering arduino-st)]
+                [mapped-val (unity-id->arduino-st->unity-val unity-id sketch-st)]
+                [post-st-eq? (eq? mapped-val unity-val)]
+                [valid-ordering? (in-list? trace-ordering valid-orderings)]
+                [monotonic? (if (in-list? unity-id ext-vars)
+                                (monotonic-keys-ok? (list unity-id)
+                                                    arduino-st
+                                                    sketch-st
+                                                    unity-st
+                                                    unity-trace
+                                                    arduino-st->unity-st)
+                                #t)]
+                [model (synthesize
+                        #:forall arduino-st
+                        #:guarantee (begin
+                                      (assume unity-guard)
+                                      (assert (and post-st-eq? valid-ordering? monotonic?))))]
+                [ordered-trace (if (sat? model)
+                                   (evaluate trace-ordering model)
+                                   model)])
+           (begin
+             (display (format "[try-trim-ordering] ~a ~a sec. length: ~a ~a -> ~a~n"
+                              (sat? model)
+                              (- (current-seconds) start-time)
+                              len
+                              synthesized-trace
+                              ordered-trace)
+                      (current-error-port))
+             (if (sat? model)
+                 ordered-trace
+                 (if (>= len (length synthesized-trace))
+                     ordered-trace
+                     (try-trim-ordering (add1 len) synthesized-trace unity-id unity-val))))))))
 
     (if (eq? unity-trace unity-st)
         '()
         ;; Trimming may result in "no-op" traces. Exclude those.
-        (let* ([new-trace (trim-trace unity-trace unity-st)]
+        (let* ([new-trace (vc-wrapper (trim-trace unity-trace unity-st))]
                [unity-val-arduino-traces (map (lambda (trace-elem)
                                                 (let* ([unity-id (car trace-elem)]
                                                        [unity-val (cdr trace-elem)]
@@ -260,24 +249,24 @@
           traces))))
 
 (define (try-synth-decl context)
-  (if (null? context)
-      '()
-      (let* ([start-time (current-seconds)]
-             [cxt-mapping (car context)]
-             [decl-sketch (begin
-                            (clear-asserts!)
-                            (context-stmt?? cxt-mapping))]
-             [arduino-decl-env (interpret-stmt (list decl-sketch) '() '())]
-             [arduino-decl-cxt (environment*-context arduino-decl-env)]
-             [arduino-decl-st (environment*-state arduino-decl-env)]
-             [cxt-ok? (eq? arduino-decl-cxt (list cxt-mapping))]
-             [st-ok? (null? arduino-decl-st)]
-             [decl-model (solve (assert (and cxt-ok? st-ok?)))]
-             [synth-decl (if (sat? decl-model)
-                             (evaluate decl-sketch decl-model)
-                             '())])
-        (cons synth-decl
-              (try-synth-decl (cdr context))))))
+  (with-terms
+    (vc-wrapper
+     (if (null? context)
+         '()
+         (let* ([start-time (current-seconds)]
+                [cxt-mapping (car context)]
+                [decl-sketch (context-stmt?? cxt-mapping)]
+                [arduino-decl-env (interpret-stmt (list decl-sketch) '() '())]
+                [arduino-decl-cxt (environment*-context arduino-decl-env)]
+                [arduino-decl-st (environment*-state arduino-decl-env)]
+                [cxt-ok? (eq? arduino-decl-cxt (list cxt-mapping))]
+                [st-ok? (null? arduino-decl-st)]
+                [decl-model (solve (assert (and cxt-ok? st-ok?)))]
+                [synth-decl (if (sat? decl-model)
+                                (evaluate decl-sketch decl-model)
+                                '())])
+           (cons synth-decl
+                 (try-synth-decl (cdr context))))))))
 
 (define (guarded-stmts->setup-stmt synth-map unity-initialize-st guarded-stmt)
   (let* ([start-time (current-seconds)]
@@ -318,7 +307,7 @@
   (let* ([guard (guarded-trace-guard guarded-tr)]
          [trace (guarded-trace-trace guarded-tr)]
          [synth-guard (try-synth-expr synth-map assumptions guard '())]
-         [synth-traces (unity-trace->arduino-traces synth-map assumptions guard trace)]
+         [synth-traces (unity-trace->arduino-traces synth-map guard trace)]
          [ordered-stmt (arduino-traces->stmt synth-map guard synth-traces '())])
     (guarded-stmt synth-guard ordered-stmt)))
 
@@ -348,3 +337,44 @@
      (loop* loop-stmt))))
 
 (provide unity-prog->arduino-prog)
+
+;; (define stmts
+;;   (list
+;;    (:=* 'a (bv #x01 8))
+;;    (:=* 'b (bv #x02 8))
+;;    (:=* 'c (bv #x03 8))))
+
+;; (define spec
+;;   (list (cons 'b (bv #x02 8))
+;;         (cons 'a (bv #x01 8))
+;;         (cons 'c (bv #x03 8))))
+
+;; (struct stobj (obj))
+
+;; (define shuffle
+;;   (map stobj
+;;        (permutations stmts)))
+
+;; (define naked-shuffle
+;;   (permutations stmts))
+
+;; (require rosette/lib/angelic)
+
+;; (define sketch (apply choose* shuffle))
+
+;; (define naked-sketch (apply choose* naked-shuffle))
+
+;; (define sep-executions
+;;   (for/all ([s sketch])
+;;            (eq?
+;;             spec
+;;             (environment*-state (interpret-stmt (stobj-obj s) '() '())))))
+
+;; (define naked-sep-executions
+;;   (environment*-state (interpret-stmt naked-sketch '() '())))
+
+;; (define-symbolic b boolean?)
+
+;; (stobj-obj
+;;  (evaluate sketch
+;;            (time (solve (assert sep-executions)))))

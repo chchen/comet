@@ -292,38 +292,38 @@
 
 ;; Tests
 
-(assert
- (let* ([initial-state (stobj
-                        (list (cons 'out (channel* #f null))
-                              (cons 'in (channel* #t #t))))]
-        [prog unity-example-program]
-        [env (interpret-declare prog initial-state)]
-        [env2 (interpret-initially prog env)]
-        [env3 (interpret-assign prog env2)])
-   (and (environment*? env)
-        (environment*? env2)
-        (environment*? env3))))
+;; (assert
+;;  (let* ([initial-state (stobj
+;;                         (list (cons 'out (channel* #f null))
+;;                               (cons 'in (channel* #t #t))))]
+;;         [prog unity-example-program]
+;;         [env (interpret-declare prog initial-state)]
+;;         [env2 (interpret-initially prog env)]
+;;         [env3 (interpret-assign prog env2)])
+;;    (and (environment*? env)
+;;         (environment*? env2)
+;;         (environment*? env3))))
 
 ;; Assert that send-buf and recv-buf conversions work
 
-(define-symbolic N integer?)
-(define (transfer-buf from to)
-  (if (eval-send-buf-empty? from)
-      to
-      (transfer-buf
-       (eval-send-buf-next from)
-       (eval-recv-buf-put to
-                          (eval-send-buf-get from)))))
+;; (define-symbolic N integer?)
+;; (define (transfer-buf from to)
+;;   (if (eval-send-buf-empty? from)
+;;       to
+;;       (transfer-buf
+;;        (eval-send-buf-next from)
+;;        (eval-recv-buf-put to
+;;                           (eval-send-buf-get from)))))
 
-(assert
- (unsat?
-  (let* ([word-size 8]
-         [send-buffer (eval-nat->send-buf word-size N)]
-         [empty-recv-buf (eval-empty-recv-buf word-size)]
-         [recv-buffer (transfer-buf send-buffer empty-recv-buf)]
-         [recv-nat (eval-recv-buf->nat recv-buffer)])
-    (verify
-     #:assume (assert
-               (and (<= 0 N)
-                    (< N (expt 2 word-size))))
-     #:guarantee (assert (= N recv-nat))))))
+;; (assert
+;;  (unsat?
+;;   (let* ([word-size 8]
+;;          [send-buffer (eval-nat->send-buf word-size N)]
+;;          [empty-recv-buf (eval-empty-recv-buf word-size)]
+;;          [recv-buffer (transfer-buf send-buffer empty-recv-buf)]
+;;          [recv-nat (eval-recv-buf->nat recv-buffer)])
+;;     (verify
+;;      #:assume (assert
+;;                (and (<= 0 N)
+;;                     (< N (expt 2 word-size))))
+;;      #:guarantee (assert (= N recv-nat))))))

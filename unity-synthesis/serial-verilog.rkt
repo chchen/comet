@@ -6,10 +6,9 @@
          "bool-bitvec/synth.rkt"
          "verilog/backend.rkt"
          "verilog/synth.rkt"
-         "verilog/buffer.rkt"
-         "verilog/channel.rkt"
          "verilog/mapping.rkt"
-         "verilog/verify.rkt")
+         "verilog/verify.rkt"
+         rosette/lib/value-browser)
 
 ;; (time
 ;;  (let* ([prog channel-test]
@@ -37,6 +36,10 @@
  (let* ([prog channel-test]
         [synth-map (unity-prog->synth-map prog)])
    (unity-prog->always-block synth-map prog)))
+
+;; (time
+;;  (let* ([prog channel-test])
+;;    (unity-prog->verilog-module prog 'test)))
 
 ;; (time
 ;;  (let* ([prog channel-test]

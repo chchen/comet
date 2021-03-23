@@ -85,82 +85,82 @@
          interpret-stmt)
 
 ;; Tests
-(define-symbolic A B (bitvector 8))
+;; (define-symbolic A B (bitvector 8))
 
-(let ([context (list (cons 'a 'byte)
-                     (cons 'b 'byte)
-                     (cons 'c 'byte)
-                     (cons 'd0 'pin-in)
-                     (cons 'd1 'pin-out))]
-      [state (list (cons 'a A)
-                   (cons 'b B)
-                   (cons 'c (bv 1 8))
-                   (cons 'd0 (bitvector->bool A))
-                   (cons 'd1 (bitvector->bool B)))])
-  (assert
-   (unsat?
-    (verify
-     (assert
-      (and
-       (equal? (evaluate-expr (not* (and* 'a 'b))
-                              context
-                              state)
-               (evaluate-expr (or* (not* 'a) (not* 'b))
-                              context
-                              state))
-       (equal? (evaluate-expr (shl* 'c (bv 1 8))
-                              context
-                              state)
-               (bv 2 8))
-       (equal? (evaluate-expr (bv 255 8)
-                              context
-                              state)
-               (bv 255 8))
-       (word? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
-                             context
-                             state))
-       (word? (evaluate-expr (read* 'd0)
-                             context
-                             state))))))))
+;; (let ([context (list (cons 'a 'byte)
+;;                      (cons 'b 'byte)
+;;                      (cons 'c 'byte)
+;;                      (cons 'd0 'pin-in)
+;;                      (cons 'd1 'pin-out))]
+;;       [state (list (cons 'a A)
+;;                    (cons 'b B)
+;;                    (cons 'c (bv 1 8))
+;;                    (cons 'd0 (bitvector->bool A))
+;;                    (cons 'd1 (bitvector->bool B)))])
+;;   (assert
+;;    (unsat?
+;;     (verify
+;;      (assert
+;;       (and
+;;        (equal? (evaluate-expr (not* (and* 'a 'b))
+;;                               context
+;;                               state)
+;;                (evaluate-expr (or* (not* 'a) (not* 'b))
+;;                               context
+;;                               state))
+;;        (equal? (evaluate-expr (shl* 'c (bv 1 8))
+;;                               context
+;;                               state)
+;;                (bv 2 8))
+;;        (equal? (evaluate-expr (bv 255 8)
+;;                               context
+;;                               state)
+;;                (bv 255 8))
+;;        (word? (evaluate-expr (eq* (read* 'd0) (read* 'd1))
+;;                              context
+;;                              state))
+;;        (word? (evaluate-expr (read* 'd0)
+;;                              context
+;;                              state))))))))
 
-(let* ([init-env
-        (interpret-stmt (list (byte* 'x)
-                              (byte* 't)
-                              (pin-mode* 'd0 'INPUT)
-                              (pin-mode* 'd1 'OUTPUT)
-                              (:=* 'x 'false)
-                              (write* 'd1 'HIGH))
-                        '()
-                        '())]
-       [init-cxt (environment*-context init-env)]
-       [init-st (environment*-state init-env)]
-       [if-env
-        (interpret-stmt (list (if* 't
-                                   (list (write* 'd1 'HIGH))
-                                   (list (write* 'd1 'LOW)))
-                              (:=* 'x 'true))
-                        init-cxt
-                        (cons (cons 't A)
-                              init-st))]
-       [if-cxt (environment*-context if-env)]
-       [if-st (environment*-state if-env)])
-  (assert
-   (unsat?
-    (verify
-     (assert
-      (and (equal? (list (cons 'd1 'pin-out)
-                         (cons 'd0 'pin-in)
-                         (cons 't 'byte)
-                         (cons 'x 'byte))
-                   init-cxt)
-           (equal? (list (cons 'd1 #t)
-                         (cons 'x false-word))
-                   init-st)
-           (equal? (get-mapping 'd1 if-st)
-                   (if (bitvector->bool A)
-                       #t
-                       #f))
-           (equal? (get-mapping 'x if-st)
-                   true-word)
-           (equal? if-cxt
-                   init-cxt)))))))
+;; (let* ([init-env
+;;         (interpret-stmt (list (byte* 'x)
+;;                               (byte* 't)
+;;                               (pin-mode* 'd0 'INPUT)
+;;                               (pin-mode* 'd1 'OUTPUT)
+;;                               (:=* 'x 'false)
+;;                               (write* 'd1 'HIGH))
+;;                         '()
+;;                         '())]
+;;        [init-cxt (environment*-context init-env)]
+;;        [init-st (environment*-state init-env)]
+;;        [if-env
+;;         (interpret-stmt (list (if* 't
+;;                                    (list (write* 'd1 'HIGH))
+;;                                    (list (write* 'd1 'LOW)))
+;;                               (:=* 'x 'true))
+;;                         init-cxt
+;;                         (cons (cons 't A)
+;;                               init-st))]
+;;        [if-cxt (environment*-context if-env)]
+;;        [if-st (environment*-state if-env)])
+;;   (assert
+;;    (unsat?
+;;     (verify
+;;      (assert
+;;       (and (equal? (list (cons 'd1 'pin-out)
+;;                          (cons 'd0 'pin-in)
+;;                          (cons 't 'byte)
+;;                          (cons 'x 'byte))
+;;                    init-cxt)
+;;            (equal? (list (cons 'd1 #t)
+;;                          (cons 'x false-word))
+;;                    init-st)
+;;            (equal? (get-mapping 'd1 if-st)
+;;                    (if (bitvector->bool A)
+;;                        #t
+;;                        #f))
+;;            (equal? (get-mapping 'x if-st)
+;;                    true-word)
+;;            (equal? if-cxt
+;;                    init-cxt)))))))

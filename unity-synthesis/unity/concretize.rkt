@@ -9,8 +9,8 @@
         union
         (let* ([condition (caar remaining)]
                [consequent (cdar remaining)])
-          (if (unsat? (verify #:assume (assert guard)
-                              #:guarantee (assert condition)))
+          (if (unsat? (verify (begin (assume guard)
+                                     (assert condition))))
               (concretize-val consequent guard)
               (helper (cdr remaining))))))
 
@@ -18,11 +18,11 @@
 
 (define (concretize-bool-expr expr guard)
   ;; Try and prove value of the total expression
-  (if (unsat? (verify #:assume (assert guard)
-                      #:guarantee (assert expr)))
+  (if (unsat? (verify (begin (assume guard)
+                             (assert expr))))
       #t
-      (if (unsat? (verify #:assume (assert guard)
-                          #:guarantee (assert (not expr))))
+      (if (unsat? (verify (begin (assume guard)
+                                 (assert (not expr)))))
           #f
           ;; Try and break down into subexpressions
           (match expr

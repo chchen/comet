@@ -616,6 +616,78 @@
                    (and* (send-buf-empty?* 'out_prop_val)
                          (=* 'phase 7)))))))))))
 
+(define mini-prop
+  (unity*
+   (declare*
+    (list (cons 'ballot 'natural)
+          (cons 'value 'natural)
+          (cons 'phase 'natural)
+          (cons 'out_a 'send-channel)
+          (cons 'out_b 'send-channel)
+          (cons 'out_c 'send-channel)
+          (cons 'out_a_bal 'send-buf)
+          (cons 'out_b_bal 'send-buf)
+          (cons 'out_c_bal 'send-buf)))
+   (initially*
+    (list
+     (:=* (list 'ballot
+                'value
+                'phase)
+          (list 1
+                32
+                1))))
+   (assign*
+    (list
+     (list
+      ;; Phase 0: Accepting state
+      ;; Phase 255: Failure state
+      ;; 01 Failure mode: max ballot value
+      (:=* (list 'phase)
+           (case*
+            (list (cons (list 255)
+                        (=* 'ballot 255)))))
+      ;; 02 Phase 1->2: load buffers for sending prepare messages
+      (:=* (list 'out_a_bal
+                 'out_b_bal
+                 'out_c_bal
+                 'phase)
+           (case*
+            (list (cons (list (nat->send-buf* vect-len 'ballot)
+                              (nat->send-buf* vect-len 'ballot)
+                              (nat->send-buf* vect-len 'ballot)
+                              2)
+                        (=* 'phase 1)))))
+      ;; 03 Phase 2: send promise message to acceptors
+      (:=* (list 'out_a
+                 'out_a_bal)
+           (case*
+            (list
+             (cons (list (message* (send-buf-get* 'out_a_bal))
+                         (send-buf-next* 'out_a_bal))
+                   (and* (empty?* 'out_a)
+                         (and* (not* (send-buf-empty?* 'out_a_bal))
+                               (=* 'phase 2)))))))
+      ;; 04
+      (:=* (list 'out_b
+                 'out_b_bal)
+           (case*
+            (list
+             (cons (list (message* (send-buf-get* 'out_b_bal))
+                         (send-buf-next* 'out_b_bal))
+                   (and* (empty?* 'out_b)
+                         (and* (not* (send-buf-empty?* 'out_b_bal))
+                               (=* 'phase 2)))))))
+      ;; 05
+      (:=* (list 'out_c
+                 'out_c_bal)
+           (case*
+            (list
+             (cons (list (message* (send-buf-get* 'out_c_bal))
+                         (send-buf-next* 'out_c_bal))
+                   (and* (empty?* 'out_c)
+                         (and* (not* (send-buf-empty?* 'out_c_bal))
+                               (=* 'phase 2))))))))))))
+
 (define mini-test
   (unity*
    (declare*
@@ -653,4 +725,5 @@
 
 (provide proposer
          acceptor
-         mini-test)
+         mini-test
+         mini-prop)

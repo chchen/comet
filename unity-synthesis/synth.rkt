@@ -53,13 +53,14 @@
       (declare* unity-cxt)
       initially
       assign)
-     (let* ([target-st->unity-st (synth-map-target-state->unity-state synthesis-map)]
+     (let* ([start-time (current-seconds)]
+            [target-st->unity-st (synth-map-target-state->unity-state synthesis-map)]
             [target-start-st (synth-map-target-state synthesis-map)]
             [unity-start-st (target-st->unity-st target-start-st)]
             [unity-start-stobj (stobj unity-start-st)]
             [unity-start-env (interpret-declare unity-prog unity-start-stobj)]
-            [unity-initialized-env (interpret-initially unity-prog unity-start-env)]
-            [unity-assigned-env (interpret-assign unity-prog unity-start-env)])
+            [unity-initialized-env (vc-wrapper (interpret-initially unity-prog unity-start-env))]
+            [unity-assigned-env (vc-wrapper (interpret-assign unity-prog unity-start-env))])
 
        (define (symbolic-pair->guarded-trace p)
          (let* ([guard (car p)]
@@ -77,12 +78,16 @@
                    (union-contents stobj)))
              (symbolic-pair->guarded-trace (cons #t stobj))))
 
-       (begin
-         (clear-asserts!)
-         (synth-traces (stobj->guarded-traces
-                        (environment*-stobj unity-initialized-env))
-                       (stobj->guarded-traces
-                        (environment*-stobj unity-assigned-env)))))]))
+       (let ([init-guarded-traces (stobj->guarded-traces
+                                   (environment*-stobj unity-initialized-env))]
+             [assign-guarded-traces (stobj->guarded-traces
+                                     (environment*-stobj unity-assigned-env))])
+         (begin
+           (display (format "[unity-prog->synth-traces] ~a sec.~n"
+                            (- (current-seconds) start-time))
+                    (current-error-port))
+           (synth-traces init-guarded-traces
+                         assign-guarded-traces))))]))
 
 (define (unity-prog->assign-state unity-prog synthesis-map)
   (match unity-prog
@@ -96,10 +101,8 @@
             [unity-start-stobj (stobj unity-start-st)]
             [unity-start-env (interpret-declare unity-prog unity-start-stobj)]
             [unity-assigned-env (interpret-assign unity-prog unity-start-env)])
-       (begin
-         (clear-asserts!)
-         (stobj-state
-          (environment*-stobj unity-assigned-env))))]))
+       (stobj-state
+        (environment*-stobj unity-assigned-env)))]))
 
 (define (unity-prog->initially-state unity-prog synthesis-map)
   (match unity-prog
@@ -113,10 +116,8 @@
             [unity-start-stobj (stobj unity-start-st)]
             [unity-start-env (interpret-declare unity-prog unity-start-stobj)]
             [unity-initialized-env (interpret-initially unity-prog unity-start-env)])
-       (begin
-         (clear-asserts!)
-         (stobj-state
-          (environment*-stobj unity-initialized-env))))]))
+       (stobj-state
+        (environment*-stobj unity-initialized-env)))]))
 
 ;; Ensures a monotonic transition for each key-value
 ;;
@@ -168,7 +169,7 @@
 (define (symbolic-in-list? k l)
   (if (null? l)
       #f
-      (or (eq-symbolic? k (car l))
+      (or (concrete-eq? k (car l))
           (symbolic-in-list? k (cdr l)))))
 
 ;; Find the relevant target-vals to unity-val, Looking for target-vals that
@@ -233,6 +234,7 @@
          synth-map-unity-id->target-state->unity-val
          synth-map-unity-id->target-ids
          synth-traces
+         synth-traces?
          synth-traces-initially
          synth-traces-assign
          guarded-trace
