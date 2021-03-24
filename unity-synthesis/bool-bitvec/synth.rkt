@@ -48,7 +48,6 @@
                 [relevant-vals (append target-id-vals
                                        memoized-values
                                        (relevant-values unity-val target-other-vals))]
-                ;; [x (begin (display (format "[rvals] ~a~n" relevant-vals)) #t)]
                 [sketch-trace (trace?? writable-ids relevant-vals (max 0 depth) target-st)]
                 [mapped-val (unity-id->target-st->unity-val unity-id sketch-trace)]
                 [model (synthesize
@@ -79,8 +78,7 @@
 
     (define (synth-subtrace subtrace memos synth-traces)
       (if (null? subtrace)
-          (cons memos
-                (apply append synth-traces))
+          (cons memos synth-traces)
           (let* ([unity-k-v (car subtrace)]
                  [unity-key (car unity-k-v)]
                  [unity-val (cdr unity-k-v)]

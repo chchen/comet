@@ -75,12 +75,11 @@
 (define (unity-guarded-trace->guarded-stmt synth-map assumptions guarded-tr)
   (let* ([guard (guarded-trace-guard guarded-tr)]
          [trace (guarded-trace-trace guarded-tr)]
-         [synth-guard
-          (try-synth-expr synth-map assumptions guard '())]
+         [synth-guard (try-synth-expr synth-map assumptions guard '())]
          [memoized-synth-trace
           (unity-trace->memoized-target-trace synth-map '() guard trace)]
-         [synth-stmts
-          (target-trace->target-stmts synth-map guard (cdr memoized-synth-trace))])
+         [synth-trace (apply append (cdr memoized-synth-trace))]
+         [synth-stmts (target-trace->target-stmts synth-map guard synth-trace)])
     (guarded-stmt synth-guard
                   synth-stmts)))
 
@@ -92,12 +91,11 @@
                [assumptions (car g-ass)]
                [guard (guarded-trace-guard guarded-tr)]
                [trace (guarded-trace-trace guarded-tr)]
-               [synth-guard
-                (try-synth-expr synth-map assumptions guard '())]
+               [synth-guard (try-synth-expr synth-map assumptions guard '())]
                [memoized-synth-trace
                 (unity-trace->memoized-target-trace synth-map memos guard trace)]
-               [synth-stmts
-                (target-trace->target-stmts synth-map guard (cdr memoized-synth-trace))])
+               [synth-trace (apply append (cdr memoized-synth-trace))]
+               [synth-stmts (target-trace->target-stmts synth-map guard synth-trace)])
           (cons (guarded-stmt synth-guard
                               synth-stmts)
                 (helper (cdr g-trs)
