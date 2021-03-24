@@ -20,11 +20,7 @@
 ;;  (unity-prog->arduino-prog channel-fifo)))
 
 ;; (time (print-arduino-program
-;;        (unity-prog->arduino-prog channel-test)))
-
-;; (unity-prog->arduino-prog channel-test)
-
-(unity-prog->arduino-prog send-buf-test)
+;;        (unity-prog->arduino-prog sender)))
 
 ;; (verify-arduino-prog channel-recv-buf-test
 ;;                      channel-recv-buf-impl)
