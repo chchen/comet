@@ -104,6 +104,18 @@
   (syntax-rules ()
     [(vc-wrapper expr) (result-value (with-vc expr))]))
 
+(define (union-pick-head val)
+  (if (union? val)
+      (cdar (union-contents val))
+      val))
+
+;; Given a trace sequence, return the trace sequence without the tail
+(define (trim-trace trace tail)
+  (if (eq? trace tail)
+      '()
+      (cons (car trace)
+            (trim-trace (cdr trace) tail))))
+
 (provide concrete-eq?
          equal-length?
          in-list?
@@ -119,4 +131,6 @@
          type-in-context
          pretty-indent
          prefixes
-         vc-wrapper)
+         vc-wrapper
+         union-pick-head
+         trim-trace)
