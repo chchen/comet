@@ -8,48 +8,49 @@
 ;; in 8-bit unsigned bitvectors
 
 ;; Traditional "Boolean" Expressions
-;; Byte -> Byte
+;; Bitvector -> Bitvector
 (struct not* (expr) #:transparent)
-;; Byte -> Byte -> Byte
+;; Bitvector -> Bitvector -> Bitvector
 (struct and* (left right) #:transparent)
 (struct or* (left right) #:transparent)
 (struct lt* (left right) #:transparent)
 (struct eq* (left right) #:transparent)
 
-;; Traditional "Byte/Bitwise" Expressions
-;; Byte -> Byte
+;; Traditional "Bitvector/Bitwise" Expressions
+;; Bitvector -> Bitvector
 (struct bwnot* (left) #:transparent)
-;; Byte -> Byte -> Byte
+;; Bitvector -> Bitvector -> Bitvector
 (struct add* (left right) #:transparent)
 (struct bwand* (left right) #:transparent)
 (struct bwor* (left right) #:transparent)
 (struct bwxor* (left right) #:transparent)
-(struct shl* (byte shift-by) #:transparent)
-(struct shr* (byte shift-by) #:transparent)
+(struct shl* (bitvector shift-by) #:transparent)
+(struct shr* (bitvector shift-by) #:transparent)
 
 ;; Input
-;; Symbol -> Byte Expression
+;; Symbol -> Bitvector Expression
 ;; Read returns 0x1 (true) or 0x0 (false)
 (struct read* (pin) #:transparent)
 
 ;; Setup-only statements
 ;; Symbol -> Unit
 (struct byte* (ident) #:transparent)
+(struct unsigned-int* (ident) #:transparent)
 
 ;; Symbol -> Symbol -> Unit
 (struct pin-mode* (pin mode) #:transparent)
 
 ;; Output
-;; Symbol -> Byte -> Unit
+;; Symbol -> Bitvector -> Unit
 ;; Pins hold boolean values, so write coerces 0x0 -> false, true otherwise
 (struct write* (pin expr) #:transparent)
 
 ;; Variable
-;; Symbol -> Byte -> Unit
+;; Symbol -> Bitvector -> Unit
 (struct :=* (var expr) #:transparent)
 
 ;; Conditional Execution
-;; Byte -> Unit -> Unit -> Unit
+;; Bitvector -> Unit -> Unit -> Unit
 (struct if* (test left right) #:transparent)
 
 (provide arduino*
@@ -71,6 +72,7 @@
          shr*
          read*
          byte*
+         unsigned-int*
          pin-mode*
          write*
          :=*

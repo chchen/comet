@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "../environment.rkt"
+(require "../bool-bitvec/types.rkt"
+         "../environment.rkt"
          "../util.rkt"
          "bitvector.rkt"
          "syntax.rkt"
@@ -35,12 +36,12 @@
       [(bwxor* l r) (binexp bvxor l r)]
       [(shl* l r) (binexp bvshl l r)]
       [(shr* l r) (binexp bvlshr l r)]
-      [(read* p) (unexp bool->word p)]
-      ['false false-word]
-      ['true true-word]
-      ['LOW false-word]
-      ['HIGH true-word]
-      [v (if (word? v)
+      [(read* p) (unexp bool->vect p)]
+      ['false false-vect]
+      ['true true-vect]
+      ['LOW false-vect]
+      ['HIGH true-vect]
+      [v (if (vect? v)
              v
              (get-mapping v state))]))
 
@@ -54,6 +55,10 @@
        [(byte* id)
         (interpret-stmt tail
                         (add-mapping id 'byte context)
+                        state)]
+       [(unsigned-int* id)
+        (interpret-stmt tail
+                        (add-mapping id 'unsigned-int context)
                         state)]
        [(pin-mode* pin mode)
         (interpret-stmt tail

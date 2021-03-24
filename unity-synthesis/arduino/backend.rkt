@@ -1,11 +1,11 @@
 #lang rosette/safe
 
-(require "bitvector.rkt"
-         "syntax.rkt"
+(require "../bool-bitvec/types.rkt"
          "../util.rkt"
-         rosette/lib/match
+         "syntax.rkt"
+         (only-in racket/base symbol->string substring)
          (only-in racket/string string-join)
-         (only-in racket/base symbol->string substring))
+         rosette/lib/match)
 
 (define (print-arduino-program program)
   (display
@@ -33,6 +33,7 @@
   (define (var-stmt? stmt)
     (match stmt
       [(byte* _) #t]
+      [(unsigned-int* _) #t]
       [_ #f]))
 
   (filter var-stmt? setup))
@@ -41,6 +42,7 @@
   (define (pins-inits-stmt? stmt)
     (match stmt
       [(byte* _) #f]
+      [(unsigned-int* _) #f]
       [_ #t]))
 
   (filter pins-inits-stmt? setup))
@@ -56,6 +58,7 @@
   (define (emit-stmt stmt)
     (match stmt
       [(byte* ident) (format "byte ~a;" ident)]
+      [(unsigned-int* ident) (format "unsigned int ~a;" ident)]
       [(pin-mode* pin mode) (format "pinMode(~a, ~a);"
                                     (pin-id pin)
                                     mode)]
@@ -94,7 +97,7 @@
     [(read* e) (format "digitalRead(~a)" (pin-id e))]
     [t (format "~a"
                (cond
-                 [(word? t) (bitvector->natural t)]
+                 [(vect? t) (bitvector->natural t)]
                  [else t]))]))
 
 (define (pin-id id)

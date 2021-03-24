@@ -14,9 +14,9 @@
 (define max-pin-id
   21)
 
-;; The Arduino model admits three different sorts of mutable references: byte
-;; variables, input pins, and output pins. Variables are used for internal
-;; state, and pins are used for external state (input/output).
+;; The Arduino model admits four different sorts of mutable references: byte
+;; variables, unsigned int variables, input pins, and output pins. Variables are
+;; used for internal state, and pins are used for external state (input/output).
 ;;
 ;; The current strategy for showing equivalence is to translate a
 ;; UNITY context C_u into an Arduino context C_a, and to derive a mapping
@@ -71,6 +71,7 @@
   (define (target-id-writable? id cxt)
     (match (get-mapping id cxt)
       ['byte #t]
+      ['unsigned-int #t]
       ['pin-out #t]
       [_ #f]))
 
@@ -86,7 +87,7 @@
                       (lambda (id) (get-mapping id inv-map)))]
       [(cons (cons id 'boolean) tail)
        (helper tail
-               (cons (cons id 'byte)
+               (cons (cons id 'unsigned-int)
                      arduino-cxt)
                (cons (cons id
                            (lambda (st)
@@ -97,7 +98,7 @@
                current-pin)]
       [(cons (cons id 'natural) tail)
        (helper tail
-               (cons (cons id 'byte)
+               (cons (cons id 'unsigned-int)
                      arduino-cxt)
                (cons (cons id
                            (lambda (st)
@@ -158,8 +159,8 @@
        (let ([rcvd-id (symbol-format "~a_rcvd" id)]
              [vals-id (symbol-format "~a_vals" id)])
          (helper tail
-                 (append (list (cons rcvd-id 'byte)
-                               (cons vals-id 'byte))
+                 (append (list (cons rcvd-id 'unsigned-int)
+                               (cons vals-id 'unsigned-int))
                          arduino-cxt)
                  (cons (cons id
                              (lambda (st)
@@ -176,8 +177,8 @@
        (let ([sent-id (symbol-format "~a_sent" id)]
              [vals-id (symbol-format "~a_vals" id)])
          (helper tail
-                 (append (list (cons sent-id 'byte)
-                               (cons vals-id 'byte))
+                 (append (list (cons sent-id 'unsigned-int)
+                               (cons vals-id 'unsigned-int))
                          arduino-cxt)
                  (cons (cons id
                              (lambda (st)

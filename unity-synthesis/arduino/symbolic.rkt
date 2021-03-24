@@ -1,6 +1,6 @@
 #lang rosette/safe
 
-(require "bitvector.rkt"
+(require "../bool-bitvec/types.rkt"
          rosette/lib/match)
 
 (define (symbolic-state context)
@@ -8,8 +8,8 @@
     (define s (constant id boolean?))
     s)
 
-  (define (symbolic-byte id)
-    (define s (constant id word?))
+  (define (symbolic-word id)
+    (define s (constant id vect?))
     s)
 
   (define (helper cxt)
@@ -17,7 +17,8 @@
       ['() '()]
       [(cons (cons id typ) tail)
        (cons (cons id (match typ
-                        ['byte (symbolic-byte id)]
+                        ['byte (symbolic-word id)]
+                        ['unsigned-int (symbolic-word id)]
                         ['pin-in (symbolic-boolean id)]
                         ['pin-out (symbolic-boolean id)]))
              (helper tail))]))
