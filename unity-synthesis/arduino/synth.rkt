@@ -60,10 +60,20 @@
          [arduino-st->unity-st (synth-map-target-state->unity-state synth-map)]
          [arduino-st (synth-map-target-state synth-map)]
          [unity-st (arduino-st->unity-st arduino-st)]
+         [traces-dep-ok? (traces-dep-check-fn synth-map)]
+         [unity-external-vars  (synth-map-unity-external-vars synth-map)]
          [memos-unordered-traces (bb:unity-trace->memoized-target-trace synth-map
                                                                         memos
                                                                         unity-guard
                                                                         unity-trace)])
+
+    (define (trim-arduino-trace trace)
+      (vc-wrapper
+       (trim-trace trace arduino-st)))
+
+    (define (interp-arduino-stmts stmts)
+      (environment*-state
+       (interpret-stmt stmts arduino-cxt arduino-st)))
 
     (define (trace-elem->stmt trace-elem)
       (let* ([id (car trace-elem)]
@@ -74,51 +84,55 @@
             (write* id concrete-expr)
             (:=* id concrete-expr))))
 
-    (define (try-fine-ordering unity-id arduino-stmts)
+    (define (try-local-ordering unity-id arduino-stmts)
       (with-terms
         (vc-wrapper
          (let* ([start-time (current-seconds)]
                 [sketch (ordering?? arduino-stmts)]
                 [sketch-ok? (for/all ([s sketch])
-                                     (monotonic-ok? unity-id
-                                                    arduino-st
-                                                    (environment*-state
-                                                     (interpret-stmt (opaque-val s)
-                                                                     arduino-cxt
-                                                                     arduino-st))
-                                                    unity-st
-                                                    unity-trace
-                                                    arduino-st->unity-st))]
+                                     (let* ([post-state
+                                             (interp-arduino-stmts (opaque-val s))]
+                                            [mapped-state
+                                             (arduino-st->unity-st post-state)])
+                                       (and (if (in-list? unity-id unity-external-vars)
+                                                (monotonic-ok? unity-id
+                                                               arduino-st
+                                                               post-state
+                                                               unity-st
+                                                               unity-trace
+                                                               arduino-st->unity-st)
+                                                #t)
+                                            (eq? (get-mapping unity-id mapped-state)
+                                                 (get-mapping unity-id unity-trace)))))]
                 [order-model (synthesize
                         #:forall arduino-st
                         #:guarantee (begin
                                       (assume unity-guard)
                                       (assert sketch-ok?)))]
                 [ordered-stmts (if (sat? order-model)
-                                   (opaque-val (evaluate sketch order-model))
+                                   (opaque-val
+                                    (union-pick-head
+                                     (evaluate sketch order-model)))
                                    order-model)])
            (begin
-             (display (format "[try-fine-ordering] ~a ~a sec. ~a~n"
+             (display (format "[try-local-ordering] ~a ~a sec. ~a~n"
                               (sat? order-model)
                               (- (current-seconds) start-time)
                               ordered-stmts)
                       (current-error-port))
              ordered-stmts)))))
 
-    (define (try-coarse-ordering arduino-traces arduino-stmts)
+    (define (try-global-ordering arduino-stmts)
       (with-terms
         (vc-wrapper
          (let* ([start-time (current-seconds)]
-                [reference-trace (apply append arduino-traces)]
                 [sketch (ordering?? arduino-stmts)]
                 [sketch-ok? (for/all ([s sketch])
-                                     (map-eq-modulo-keys?
-                                      (keys reference-trace)
-                                      reference-trace
-                                      (environment*-state
-                                       (interpret-stmt (apply append (opaque-val s))
-                                                       arduino-cxt
-                                                       arduino-st))))]
+                                     (let ([arduino-traces
+                                            (map trim-arduino-trace
+                                                 (map interp-arduino-stmts
+                                                      (opaque-val s)))])
+                                       (traces-dep-ok? arduino-traces)))]
                 [order-model (synthesize
                         #:forall arduino-st
                         #:guarantee (begin
@@ -132,7 +146,7 @@
                                           (opaque-val chosen-ordering))
                                    order-model)])
            (begin
-             (display (format "[try-coarse-ordering] ~a ~a sec. ~a~n"
+             (display (format "[try-global-ordering] ~a ~a sec. ~a~n"
                               (sat? order-model)
                               (- (current-seconds) start-time)
                               ordered-stmts)
@@ -140,7 +154,7 @@
              ordered-stmts)))))
 
     (if (eq? unity-trace unity-st)
-        '()
+        (cons memos '())
         (let* ([new-trace (vc-wrapper (trim-trace unity-trace unity-st))]
                [unity-keys (map car new-trace)]
                [unity-values (map cdr new-trace)]
@@ -149,13 +163,10 @@
                [unordered-stmts (map (lambda (subtrace)
                                        (map trace-elem->stmt subtrace))
                                      unordered-traces)]
-               [locally-ordered-stmts (map (lambda (k s)
-                                             (if (in-list? k (synth-map-unity-external-vars synth-map))
-                                                 (try-fine-ordering k s)
-                                                 s))
+               [locally-ordered-stmts (map try-local-ordering
                                            unity-keys unordered-stmts)])
           (cons memos
-                (try-coarse-ordering unordered-traces locally-ordered-stmts))))))
+                (try-global-ordering locally-ordered-stmts))))))
 
 (define (try-synth-decl context)
   (with-terms
@@ -177,7 +188,7 @@
            (cons synth-decl
                  (try-synth-decl (cdr context))))))))
 
-(define (guarded-stmts->setup-stmt synth-map unity-initialize-st guarded-stmt)
+(define (guarded-stmts->setup-stmt synth-map guarded-stmt)
   (let* ([start-time (current-seconds)]
          [arduino-cxt (synth-map-target-context synth-map)]
          ;; Synthesize declarations
@@ -233,14 +244,14 @@
                     (current-error-port))
            synth-guard)))
 
-
 (define (unity-prog->arduino-prog unity-prog)
   (let* ([synth-map (unity-prog->synth-map unity-prog)]
          [synth-tr (unity-prog->synth-traces unity-prog synth-map)]
-         [initially-state (unity-prog->initially-state unity-prog synth-map)]
-         [assign-state (unity-prog->assign-state unity-prog synth-map)]
          [initially-guarded-trace (synth-traces-initially synth-tr)]
          [assign-guarded-traces (synth-traces-assign synth-tr)]
+         [check (begin (display (format "[pre-synth vc] vc: ~a~n" (vc))
+                                (current-error-port))
+                       #t)]
          [assign-guards (map guarded-trace-guard assign-guarded-traces)]
          [assign-guard-assumptions (guards->assumptions assign-guards)]
          [synth-guards (map (lambda (gd-tr gd-as)
@@ -260,7 +271,7 @@
                                                (unity-guarded-trace->synth-stmt
                                                 synth-map
                                                 initially-guarded-trace))]
-         [setup-stmt (guarded-stmts->setup-stmt synth-map initially-state initially-guarded-stmts)])
+         [setup-stmt (guarded-stmts->setup-stmt synth-map initially-guarded-stmts)])
     (arduino*
      (setup* setup-stmt)
      (loop* loop-stmt))))
