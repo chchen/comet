@@ -49,7 +49,9 @@
 
 (define (emit-block stmts)
   (if (null? stmts)
-      '()
+      (list "{"
+            "// noop"
+            "}")
       (list "{"
             (emit-stmts stmts)
             "}")))
