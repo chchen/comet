@@ -82,9 +82,7 @@
     (list (cons 'in 'recv-channel)
           (cons 'out 'send-channel)))
    (initially*
-    (list
-     (:=* (list 'out)
-          (list 'empty))))
+    '())
    (assign*
     (list
      (list
