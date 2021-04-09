@@ -16,6 +16,9 @@
 (define (in-list? val l)
   (ormap (lambda (x) (eq? val x)) l))
 
+(define (in-symbolic-list? val l)
+  (ormap (lambda (x) (concrete-eq? val x)) l))
+
 ;; We use a unified state representation for our models, a associative list from
 ;; symbol to value.
 
@@ -119,6 +122,7 @@
 (provide concrete-eq?
          equal-length?
          in-list?
+         in-symbolic-list?
          mapping?
          add-mapping
          get-mapping
