@@ -1,59 +1,40 @@
 #lang rosette/safe
 
-;; Bitvector functions
-
-(define word-size
-  8)
-
-(define word?
-  (bitvector word-size))
-
-(define true-word
-  (bv 1 word-size))
-
-(define false-word
-  (bv 0 word-size))
-
-(define (bool->word v)
-  (bool->bitvector v word-size))
+(require "../bool-bitvec/types.rkt")
 
 ;; Logical AND
 (define (bvland l r)
   (if (and (bitvector->bool l)
            (bitvector->bool r))
-      true-word
-      false-word))
+      true-vect
+      false-vect))
 
 ;; Logical OR
 (define (bvlor l r)
   (if (or (bitvector->bool l)
           (bitvector->bool r))
-      true-word
-      false-word))
+      true-vect
+      false-vect))
 
 ;; Logical NOT
 (define (bvlnot l)
   (if (bitvector->bool l)
-      false-word
-      true-word))
+      false-vect
+      true-vect))
 
 ;; Equality as a word
 (define (bvleq l r)
   (if (bveq l r)
-      true-word
-      false-word))
+      true-vect
+      false-vect))
 
 ;; Less-than as a word
 (define (bvlult l r)
   (if (bvult l r)
-      true-word
-      false-word))
+      true-vect
+      false-vect))
 
-(provide word?
-         true-word
-         false-word
-         bool->word
-         bvland
+(provide bvland
          bvlor
          bvlnot
          bvleq
