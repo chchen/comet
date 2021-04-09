@@ -78,7 +78,7 @@
 
     (define (synth-subtrace subtrace memos synth-traces)
       (if (null? subtrace)
-          (cons memos synth-traces)
+          (cons memos (reverse synth-traces))
           (let* ([unity-k-v (car subtrace)]
                  [unity-key (car unity-k-v)]
                  [unity-val (cdr unity-k-v)]
