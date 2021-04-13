@@ -121,6 +121,9 @@
          [assign-traces (synth-traces-assign synth-traces)]
          [assign-guards (map guarded-trace-guard assign-traces)]
          [assign-guards-assumptions (guards->assumptions assign-guards)]
+         [check (begin (display (format "[pre-synth vc] vc: ~a~n" (vc))
+                                (current-error-port))
+                       #t)]
          [initially-stmts (unity-guarded-trace->guarded-stmt synth-map
                                                               '()
                                                               initially-trace)]
@@ -146,15 +149,20 @@
        (filter port? cxt)))
 
 (define (unity-prog->verilog-module unity-prog module-name)
-  (let* ([synth-map (unity-prog->synth-map unity-prog)]
+  (let* ([start-time (current-seconds)]
+         [synth-map (unity-prog->synth-map unity-prog)]
          [target-cxt (synth-map-target-context synth-map)]
          [port-list (verilog-context->port-list target-cxt)]
          [declarations (verilog-context->declarations target-cxt)]
          [always-block (unity-prog->always-block synth-map unity-prog)])
-    (verilog-module* module-name
-                     port-list
-                     declarations
-                     (list always-block))))
+    (begin
+      (display (format "[unity-prog->verilog-module] ~a sec.~n"
+                       (- (current-seconds) start-time))
+               (current-error-port))
+      (verilog-module* module-name
+                       port-list
+                       declarations
+                       (list always-block)))))
 
 (provide try-synth-expr
          target-trace->target-stmts
