@@ -11,7 +11,7 @@
 ;;                                ;; ':parallel.threads.max 4
 ;;                                ':parallel.enable 'true)))
 
-(error-print-width (expt 2 16))
+(error-print-width (expt 2 7))
 
 (define vect-len 32)
 
