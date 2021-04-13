@@ -26,41 +26,38 @@
     (define (verify-helper unity-guard unity-post-st)
       (with-terms
         (vc-wrapper
-         (begin
-           (assume unity-guard)
-           (let* ([start-time (current-seconds)]
-                  [concretized-post-st (concretize-val arduino-post-st #t)]
-                  [model (verify (begin
-                                   (assume unity-guard)
-                                   (assert
-                                    (and (eq? arduino-post-cxt
-                                              arduino-cxt)
-                                         (map-eq-modulo-keys? all-vars
-                                                              (arduino-st->unity-st
-                                                               concretized-post-st)
-                                                              unity-post-st)
-                                         (monotonic-keys-ok? ext-vars
-                                                             arduino-st
-                                                             concretized-post-st
-                                                             unity-st
-                                                             unity-post-st
-                                                             arduino-st->unity-st)))))])
-             (begin (display (format "[verify-helper] ~a ~a sec. case: ~a~n"
-                                     (not (sat? model))
-                                     (- (current-seconds) start-time)
-                                     unity-guard)
-                             (current-error-port))
-                    (if (sat? model)
-                        (vc-wrapper
-                         (list
-                          (cons 'arduino-pre
-                                (evaluate arduino-st model))
-                          (cons 'arduino-post
-                                (environment*-state
-                                 (interpret-stmt arduino-stmt
-                                                 arduino-cxt
-                                                 (evaluate arduino-st model))))))
-                        model)))))))
+         (let* ([start-time (current-seconds)]
+                [concretized-post-st (concretize-val arduino-post-st unity-guard)]
+                [model (verify (begin
+                                 (assume unity-guard)
+                                 (assert
+                                  (and (eq? arduino-post-cxt
+                                            arduino-cxt)
+                                       (map-eq-modulo-keys? all-vars
+                                                            (arduino-st->unity-st
+                                                             concretized-post-st)
+                                                            unity-post-st)
+                                       (monotonic-keys-ok? ext-vars
+                                                           arduino-st
+                                                           concretized-post-st
+                                                           unity-st
+                                                           unity-post-st
+                                                           arduino-st->unity-st)))))])
+           (begin (display (format "[verify-helper] ~a ~a sec. case: ~a~n"
+                                   (not (sat? model))
+                                   (- (current-seconds) start-time)
+                                   unity-guard)
+                           (current-error-port))
+                  (if (sat? model)
+                      (list
+                       (cons 'arduino-pre
+                             (evaluate arduino-st model))
+                       (cons 'arduino-post
+                             (environment*-state
+                              (interpret-stmt arduino-stmt
+                                              arduino-cxt
+                                              (evaluate arduino-st model)))))
+                      model))))))
 
     (if (union? unity-post-stobj)
         (map (lambda (union-pair)
@@ -72,17 +69,20 @@
                         (unity:stobj-state unity-post-stobj))))))
 
 (define (verify-arduino-prog unity-prog arduino-prog)
-  (match arduino-prog
-    [(arduino* (setup* setup-stmts)
-               (loop* loop-stmts))
-     (let* ([synth-map (unity-prog->synth-map unity-prog)]
-            [initially-stobj (unity-prog->initially-stobj unity-prog synth-map)]
-            [assign-stobj (vc-wrapper (unity-prog->assign-stobj unity-prog synth-map))]
-            [check (begin (display (format "[pre-verify] vc: ~a~n" (vc))
-                                   (current-error-port))
-                          #t)])
-       (list (verify-stmt synth-map initially-stobj setup-stmts #f)
-             (verify-stmt synth-map assign-stobj loop-stmts #t)))]))
+  (begin
+    (clear-vc!)
+    (clear-terms!)
+    (match arduino-prog
+      [(arduino* (setup* setup-stmts)
+                 (loop* loop-stmts))
+       (let* ([synth-map (unity-prog->synth-map unity-prog)]
+              [initially-stobj (vc-wrapper (unity-prog->initially-stobj unity-prog synth-map))]
+              [assign-stobj (vc-wrapper (unity-prog->assign-stobj unity-prog synth-map))]
+              [check (begin (display (format "[pre-verify] vc: ~a~n" (vc))
+                                     (current-error-port))
+                            #t)])
+         (list (verify-stmt synth-map initially-stobj setup-stmts #f)
+               (verify-stmt synth-map assign-stobj loop-stmts #t)))])))
 
 (provide verify-stmt
          verify-arduino-prog)
