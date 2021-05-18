@@ -19,7 +19,7 @@
 (define (try-synth-expr synth-map postulate unity-val extra-snippets)
   (let* ([target-cxt (synth-map-target-context synth-map)]
          [target-st (synth-map-target-state synth-map)]
-         [val (unity:concretize-val unity-val postulate)]
+         [val (vc-wrapper (unity:concretize-val unity-val postulate))]
          [snippets (match val
                      [(expression op args ...)
                       (if (in-list? op decomposable-ops)

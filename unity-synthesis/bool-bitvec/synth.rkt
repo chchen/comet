@@ -82,6 +82,8 @@
           (let* ([unity-k-v (car subtrace)]
                  [unity-key (car unity-k-v)]
                  [unity-val (cdr unity-k-v)]
+                 ;; Disable memoization
+                 ;; [try-memo-result '()]
                  [try-memo-result (try-memo unity-val memos)]
                  [synth-result (begin
                                  (display (format "[unity-val->subtrace] ~a memo: ~a "

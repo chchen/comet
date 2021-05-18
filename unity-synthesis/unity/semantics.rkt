@@ -1,6 +1,7 @@
 #lang rosette/safe
 
 (require "../util.rkt"
+         "concretize.rkt"
          "environment.rkt"
          "syntax.rkt"
          rosette/lib/match
@@ -140,58 +141,56 @@
              (reverse (map bool->bitvector vals))))]))
 
 ;; Evaluate an expression. Takes an expression, context, and a state
-(define (evaluate-expr expression context state-object)
-  (match state-object
-    [(stobj state)
-     (define (unary next-func expr)
-       (next-func (eval-helper expr)))
+(define (evaluate-expr expression context state)
+  (define (unary next-func expr)
+    (next-func (eval-helper expr)))
 
-     (define (binary next-func expr-l expr-r)
-       (next-func (eval-helper expr-l)
-                  (eval-helper expr-r)))
+  (define (binary next-func expr-l expr-r)
+    (next-func (eval-helper expr-l)
+               (eval-helper expr-r)))
 
-     (define (eval-helper expr)
-       (match expr
-         ;; Boolean -> Boolean Expressions
-         [(not* e) (unary eval-not e)]
-         [(and* l r) (binary eval-and l r)]
-         [(or* l r) (binary eval-or l r)]
-         [(eq* l r) (eval-helper (or* (and* l r) (and* (not* l) (not* r))))]
-         ;; Nat x Nat -> Nat Expressions
-         [(+* l r) (binary eval-+ l r)]
-         ;; Nat x Nat -> Boolean Expressions
-         [(<* l r) (binary eval-< l r)]
-         [(=* l r) (binary eval-= l r)]
-         ;; Channel Expressions
-         [(message* e) (unary eval-message e)]
-         ;; Buffer -> Boolean Predicates
-         [(send-buf-empty?* b) (unary eval-send-buf-empty? b)]
-         [(recv-buf-full?* b) (unary eval-recv-buf-full? b)]
-         ;; Buffer Expressions
-         [(nat->send-buf* l v) (binary eval-nat->send-buf l v)]
-         [(empty-recv-buf* l) (unary eval-empty-recv-buf l)]
-         [(empty-send-buf* l) (unary eval-empty-send-buf l)]
-         [(recv-buf-put* b v) (binary eval-recv-buf-put b v)]
-         [(recv-buf->nat* b) (unary eval-recv-buf->nat b)]
-         [(send-buf-get* b) (unary eval-send-buf-get b)]
-         [(send-buf-next* b) (unary eval-send-buf-next b)]
-         ;; Symbol |- *-Channel -> Boolean Predicates
-         [(full?* id) (for/all ([val (get-mapping id state)])
-                               (channel*-valid val))]
-         [(empty?* id) (for/all ([val (get-mapping id state)])
-                                (not (channel*-valid val)))]
-         ;; Symbol |- Recv-Channel -> Boolean Deconstructor
-         [(value* id) (for/all ([val (get-mapping id state)])
-                               (channel*-value val))]
-         ;; Terminals
-         [term
-          (cond
-            [(eq? term 'empty) (channel* #f null)]
-            [(boolean? term) term]
-            [(natural? term) term]
-            [(symbol? expr) (get-mapping expr state)])]))
+  (define (eval-helper expr)
+    (match expr
+      ;; Boolean -> Boolean Expressions
+      [(not* e) (unary eval-not e)]
+      [(and* l r) (binary eval-and l r)]
+      [(or* l r) (binary eval-or l r)]
+      [(eq* l r) (eval-helper (or* (and* l r) (and* (not* l) (not* r))))]
+      ;; Nat x Nat -> Nat Expressions
+      [(+* l r) (binary eval-+ l r)]
+      ;; Nat x Nat -> Boolean Expressions
+      [(<* l r) (binary eval-< l r)]
+      [(=* l r) (binary eval-= l r)]
+      ;; Channel Expressions
+      [(message* e) (unary eval-message e)]
+      ;; Buffer -> Boolean Predicates
+      [(send-buf-empty?* b) (unary eval-send-buf-empty? b)]
+      [(recv-buf-full?* b) (unary eval-recv-buf-full? b)]
+      ;; Buffer Expressions
+      [(nat->send-buf* l v) (binary eval-nat->send-buf l v)]
+      [(empty-recv-buf* l) (unary eval-empty-recv-buf l)]
+      [(empty-send-buf* l) (unary eval-empty-send-buf l)]
+      [(recv-buf-put* b v) (binary eval-recv-buf-put b v)]
+      [(recv-buf->nat* b) (unary eval-recv-buf->nat b)]
+      [(send-buf-get* b) (unary eval-send-buf-get b)]
+      [(send-buf-next* b) (unary eval-send-buf-next b)]
+      ;; Symbol |- *-Channel -> Boolean Predicates
+      [(full?* id) (for/all ([val (get-mapping id state)])
+                            (channel*-valid val))]
+      [(empty?* id) (for/all ([val (get-mapping id state)])
+                             (not (channel*-valid val)))]
+      ;; Symbol |- Recv-Channel -> Boolean Deconstructor
+      [(value* id) (for/all ([val (get-mapping id state)])
+                            (channel*-value val))]
+      ;; Terminals
+      [term
+       (cond
+         [(eq? term 'empty) (channel* #f null)]
+         [(boolean? term) term]
+         [(natural? term) term]
+         [(symbol? expr) (get-mapping expr state)])]))
 
-     (eval-helper expression)]))
+  (eval-helper expression))
 
 ;; Interpret an assignment statement
 ;;
@@ -206,19 +205,35 @@
   (match state-object
     [(stobj state)
 
-     (define (build-trace vars exprs)
-       (map (lambda (v e)
-              (cons v
-                    (evaluate-expr e context state-object)))
-            vars
-            exprs))
+     (define (build-trace vars exprs guard)
+       (define (eval-helper var expr)
+         (cons var
+               (concretize-val
+                (evaluate-expr expr context state)
+                #t)))
+
+       (let* ([start-time (current-seconds)]
+              [new-trace-vals (map eval-helper
+                                   vars
+                                   exprs)])
+         (begin
+           (display (format "[build-trace] ~a sec. guard: ~a~n"
+                            (- (current-seconds) start-time)
+                            guard)
+                    (current-error-port))
+           new-trace-vals)))
 
      (define (expand-cases vars cases)
        (map (lambda (c)
-              (let ([exps (car c)]
-                    [guard (cdr c)])
-                (guard-trace (evaluate-expr guard context state-object)
-                             (build-trace vars exps))))
+              (let* ([exps (car c)]
+                     [guard (cdr c)]
+                     [guard-val (vc-wrapper
+                                 (evaluate-expr guard context state))])
+                (guard-trace guard-val
+                             (vc-wrapper
+                              (begin
+                                (assume guard-val)
+                                (build-trace vars exps guard))))))
             cases))
 
      (define (regularize-assign assign)
@@ -227,7 +242,7 @@
           (match exps
             [(case* cases) (expand-cases vars cases)]
             [_ (guard-trace #t
-                            (build-trace vars exps))])]))
+                            (build-trace vars exps #t))])]))
 
      (define (apply-traces traces)
        (match traces
@@ -285,7 +300,6 @@
 
 (provide context->external-vars
          context->internal-vars
-         evaluate-expr
          interpret-declare
          interpret-initially
          interpret-assign)

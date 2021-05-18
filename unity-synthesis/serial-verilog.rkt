@@ -32,10 +32,9 @@
 ;;       (print-verilog-module synthesized-module)
 ;;       verifier-results))
 
-(time
- (let* ([prog channel-test]
-        [synth-map (unity-prog->synth-map prog)])
-   (unity-prog->always-block synth-map prog)))
+(let* ([prog channel-fifo]
+       [impl (time (unity-prog->verilog-module prog 'test))])
+  (time (verify-verilog-module prog impl)))
 
 ;; (time
 ;;  (let* ([prog channel-test])
@@ -78,3 +77,8 @@
 ;;         [unity-start-st (arduino-st->unity-st arduino-start-st)]
 ;;         [assign-traces (synth-traces-assign (unity-prog->synth-traces prog synth-map))])
 ;;    assign-traces))
+
+;; (time
+;;  (let* ([prog channel-fifo]
+;;         [synth-map (unity-prog->synth-map prog)])
+;;    (unity-prog->synth-traces prog synth-map)))

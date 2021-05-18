@@ -1431,11 +1431,45 @@
 ;; Rosette 4 Clean Term/VC, memoized with subterms
 ;; cpu time: 1034988 real time: 7294801 gc time: 142711
 
+;; (time
+;;  (let* ([prog proposer]
+;;         [synthesized-module (unity-prog->verilog-module prog 'proposer)])
+;;    synthesized-module))
+
+;; (time
+;;  (let* ([prog acceptor]
+;;         [impl (unity-prog->verilog-module prog 'test)])
+;;    (list impl
+;;          (verify-verilog-module prog impl))))
+
+;; (time
+;;  (let* ([prog proposer]
+;;         [impl (unity-prog->verilog-module prog 'test)])
+;;    (list impl
+;;          (verify-verilog-module prog impl))))
+
+;; acceptor
+;; concretize post-trace: 446 sec.
+;; concretize pre-trace: 131 sec
+
+;; proposer
+;; concretize post-trace: 1768 sec.
+;; concretize pre-trace: 964 sec
+;; concretize post-val: 465 sec.
+;; concretize post-val cached facts (repeated additions to assume): 382 sec.
+
 
 (time
  (let* ([prog proposer]
-        [synthesized-module (unity-prog->verilog-module prog 'proposer)])
-   synthesized-module))
+        [synth-map (unity-prog->synth-map prog)])
+   (begin
+     (unity-prog->synth-traces prog synth-map)
+     '())))
+
+;; (time
+;;  (let* ([prog proposer]
+;;         [impl proposer-impl])
+;;    (verify-verilog-module prog impl)))
 
 ;; (time
 ;;  (let* ([prog mini-prop]

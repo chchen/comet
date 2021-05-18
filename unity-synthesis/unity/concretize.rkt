@@ -11,7 +11,9 @@
                [consequent (cdar remaining)])
           (if (unsat? (verify (begin (assume guard)
                                      (assert condition))))
-              (concretize-val consequent guard)
+              (begin
+                (assume condition)
+                (concretize-val consequent guard))
               (helper (cdr remaining))))))
 
   (helper (union-contents union)))
@@ -20,10 +22,14 @@
   ;; Try and prove value of the total expression
   (if (unsat? (verify (begin (assume guard)
                              (assert expr))))
-      #t
+      (begin
+        (assume expr)
+        #t)
       (if (unsat? (verify (begin (assume guard)
                                  (assert (not expr)))))
-          #f
+          (begin
+            (assume (not expr))
+            #f)
           ;; Try and break down into subexpressions
           (match expr
             [(expression op args ...)
@@ -38,28 +44,28 @@
 
 (define (concretize-val val guard)
   (cond
+    ;; symbolic expressions/unions
     [(expression? val) (concretize-expr val guard)]
     [(union? val) (concretize-union val guard)]
+    ;; complex unity values
+    [(buffer*? val) (buffer* (concretize-val (buffer*-cursor val)
+                                             guard)
+                             (map (lambda (e)
+                                    (concretize-val e guard))
+                                  (buffer*-vals val)))]
+    [(channel*? val) (channel* (concretize-val (channel*-valid val)
+                                           guard)
+                           (concretize-val (channel*-value val)
+                                           guard))]
     [else val]))
 
 (define (concretize-trace state guard)
-  (define (concretize-unity-value val)
-    ;; For each complex unity-value type
-    (match val
-      [(buffer* cursor vals) (buffer* (concretize-val cursor guard)
-                                      (map (lambda (e)
-                                             (concretize-val e guard))
-                                           vals))]
-      [(channel* valid value) (channel* (concretize-val valid guard)
-                                        (concretize-val value guard))]
-      [_ (concretize-val val guard)]))
-
   (if (null? state)
       '()
       (let* ([id (caar state)]
              [val (cdar state)]
              [tail (cdr state)]
-             [concrete-val (concretize-unity-value val)])
+             [concrete-val (concretize-val val)])
         (cons (cons id concrete-val)
               (concretize-trace tail guard)))))
 

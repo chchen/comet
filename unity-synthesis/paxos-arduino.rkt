@@ -279,7 +279,7 @@
                                )))))))))))))))))))))))))))))))
 
 (define proposer-impl
-  (arduino*
+   (arduino*
   (setup*
    (list
     (unsigned-int* 'ballot)
@@ -360,15 +360,13 @@
          (list
           (write*
            'd2
-           (bwand* (bv #x00000001 32) (shr* 'out_a_bal_vals 'out_a_bal_sent)))
-          (write* 'd0 (lt* (read* 'd1) (bv #x00000001 32)))
+           (bwand* (shr* 'out_a_bal_vals 'out_a_bal_sent) (bv #x00000001 32)))
+          (write* 'd0 (lt* (read* 'd0) (bv #x00000001 32)))
           (:=* 'out_a_bal_sent (add* (bv #x00000001 32) 'out_a_bal_sent)))
          (list
           (if*
-           (bwand*
-            (bwand*
-             (lt* (shr* 'out_b_bal_sent (bv #x00000005 32)) (bv #x00000001 32))
-             (eq* 'phase (bv #x00000002 32)))
+           (and*
+            (shl* (eq* 'phase (bv #x00000002 32)) 'out_b_bal_sent)
             (eq* (read* 'd4) (read* 'd3)))
            (list
             (write*
@@ -376,21 +374,17 @@
              (bwand*
               (bv #x00000001 32)
               (shr* 'out_b_bal_vals 'out_b_bal_sent)))
-            (write* 'd3 (lt* (read* 'd3) (bv #x00000001 32)))
+            (write* 'd3 (lt* (read* 'd4) (bv #x00000001 32)))
             (:=* 'out_b_bal_sent (add* (bv #x00000001 32) 'out_b_bal_sent)))
            (list
             (if*
-             (bwand*
-              (lt*
-               (or*
-                (bwand* (read* 'd7) (lt* (read* 'd6) (bv #x00000001 32)))
-                (and* (read* 'd6) (lt* (read* 'd7) (bv #x00000001 32))))
-               (bv #x00000001 32))
-              (bwand*
-               (shr*
-                (bv #x80004803 32)
-                (bwand* 'out_c_bal_sent (bv #xffffffe0 32)))
-               (eq* (bv #x00000002 32) 'phase)))
+             (and*
+              (eq*
+               (bwor*
+                (and* (read* 'd6) (lt* (read* 'd7) (bv #x00000001 32)))
+                (bwand* (read* 'd7) (lt* (read* 'd6) (bv #x00000001 32))))
+               (bv #x00000000 32))
+              (shl* (eq* (bv #x00000002 32) 'phase) 'out_c_bal_sent))
              (list
               (write*
                'd8
@@ -403,11 +397,11 @@
               (if*
                (and*
                 (and*
-                 (shr* 'out_b_bal_sent (bv #x00000005 32))
                  (and*
-                  (eq* 'phase (bv #x00000002 32))
-                  (bwand* 'out_c_bal_sent (bv #xffffffe0 32))))
-                (bwand* (bv #xffffffe0 32) 'out_a_bal_sent))
+                  (eq* (bv #x00000002 32) 'phase)
+                  (bwand* 'out_c_bal_sent (bv #xffffffe0 32)))
+                 (bwand* (bv #xffffffe0 32) 'out_b_bal_sent))
+                (bwand* 'out_a_bal_sent (bv #xffffffe0 32)))
                (list
                 (:=* 'in_a_bal_rcvd (bv #x00000000 32))
                 (:=* 'in_a_bal_vals (bv #x00000000 32))
@@ -425,52 +419,56 @@
                (list
                 (if*
                  (bwand*
-                  (or*
-                   (bwand* (read* 'd9) (lt* (read* 'd10) (bv #x00000001 32)))
-                   (lt* (read* 'd9) (read* 'd10)))
                   (and*
-                   (eq* (bv #x00000003 32) 'phase)
-                   (shl* (bv #x00110151 32) 'in_a_bal_rcvd)))
+                   (shl*
+                    (bv #x00000010 32)
+                    (bwand* (bv #xffffffe0 32) 'in_a_bal_rcvd))
+                   (eq* (bv #x00000003 32) 'phase))
+                  (bwor*
+                   (and* (read* 'd9) (lt* (read* 'd10) (bv #x00000001 32)))
+                   (and* (read* 'd10) (lt* (read* 'd9) (bv #x00000001 32)))))
                  (list
                   (:=*
                    'in_a_bal_vals
                    (bwxor*
                     (bwor*
-                     (bwxor* (bv #xffffffff 32) 'in_a_bal_vals)
-                     (shl* (bv #x00000001 32) 'in_a_bal_rcvd))
+                     (shl* (bv #x00000001 32) 'in_a_bal_rcvd)
+                     (bwxor* (bv #xffffffff 32) 'in_a_bal_vals))
                     (bwxor*
-                     (bv #xffffffff 32)
-                     (shl* (read* 'd11) 'in_a_bal_rcvd))))
+                     (shl* (read* 'd11) 'in_a_bal_rcvd)
+                     (bv #xffffffff 32))))
                   (:=* 'in_a_bal_rcvd (add* (bv #x00000001 32) 'in_a_bal_rcvd))
                   (write* 'd10 (read* 'd9)))
                  (list
                   (if*
-                   (and*
+                   (bwand*
+                    (bwxor* (read* 'd10) (read* 'd9))
                     (and*
                      (shl* (eq* 'phase (bv #x00000003 32)) 'in_a_val_rcvd)
-                     (bwand* 'in_a_bal_rcvd (bv #xffffffe0 32)))
-                    (bwxor* (read* 'd10) (read* 'd9)))
+                     (bwand* (bv #xffffffe0 32) 'in_a_bal_rcvd)))
                    (list
                     (:=*
                      'in_a_val_vals
                      (bwxor*
-                      (bwor*
-                       (bwxor* (bv #xffffffff 32) 'in_a_val_vals)
-                       (shl* (bv #x00000001 32) 'in_a_val_rcvd))
                       (bwxor*
                        (shl* (read* 'd11) 'in_a_val_rcvd)
-                       (bv #xffffffff 32))))
+                       (bv #xffffffff 32))
+                      (bwor*
+                       (bwxor* (bv #xffffffff 32) 'in_a_val_vals)
+                       (shl* (bv #x00000001 32) 'in_a_val_rcvd))))
                     (:=*
                      'in_a_val_rcvd
                      (add* (bv #x00000001 32) 'in_a_val_rcvd))
                     (write* 'd10 (read* 'd9)))
                    (list
                     (if*
-                     (bwand*
+                     (and*
+                      (bwxor* (read* 'd13) (read* 'd12))
                       (and*
-                       (shr* (bv #xd6c28202 32) 'in_b_bal_rcvd)
-                       (eq* (bv #x00000003 32) 'phase))
-                      (bwxor* (read* 'd13) (read* 'd12)))
+                       (shr*
+                        (bv #x00000008 32)
+                        (bwand* (bv #xffffffe0 32) 'in_b_bal_rcvd))
+                       (eq* (bv #x00000003 32) 'phase)))
                      (list
                       (:=*
                        'in_b_bal_vals
@@ -490,10 +488,12 @@
                        (bwand*
                         (bwxor* (read* 'd13) (read* 'd12))
                         (and*
-                         (lt* (bv #x0000001f 32) 'in_b_bal_rcvd)
-                         (shl*
+                         (bwand* (bv #xffffffe0 32) 'in_b_bal_rcvd)
+                         (and*
                           (eq* (bv #x00000003 32) 'phase)
-                          'in_b_val_rcvd)))
+                          (shl*
+                           (bv #x80000000 32)
+                           (bwand* (bv #xffffffe0 32) 'in_b_val_rcvd)))))
                        (list
                         (:=*
                          'in_b_val_vals
@@ -506,17 +506,15 @@
                            (bv #xffffffff 32))))
                         (:=*
                          'in_b_val_rcvd
-                         (add* (bv #x00000001 32) 'in_b_val_rcvd))
+                         (add* 'in_b_val_rcvd (bv #x00000001 32)))
                         (write* 'd13 (read* 'd12)))
                        (list
                         (if*
                          (bwand*
-                          (bwxor* (read* 'd16) (read* 'd15))
-                          (bwand*
-                           (eq* (bv #x00000003 32) 'phase)
-                           (eq*
-                            (lt* (bv #x0000001f 32) 'in_c_bal_rcvd)
-                            (bv #x00000000 32))))
+                          (and*
+                           (eq* 'phase (bv #x00000003 32))
+                           (shr* (bv #xd7fff7ff 32) 'in_c_bal_rcvd))
+                          (bwxor* (read* 'd15) (read* 'd16)))
                          (list
                           (:=*
                            'in_c_bal_vals
@@ -534,14 +532,18 @@
                          (list
                           (if*
                            (bwand*
-                            (bwand*
+                            (add*
                              (bwand*
-                              (shr*
-                               (bv #x00000001 32)
-                               (lt* (bv #x0000001f 32) 'in_c_val_rcvd))
-                              (eq* 'phase (bv #x00000003 32)))
-                             (lt* (bv #x0000001f 32) 'in_c_bal_rcvd))
-                            (bwxor* (read* 'd16) (read* 'd15)))
+                              (lt* (read* 'd15) (bv #x00000001 32))
+                              (read* 'd16))
+                             (bwand*
+                              (read* 'd15)
+                              (lt* (read* 'd16) (bv #x00000001 32))))
+                            (and*
+                             (shl*
+                              (eq* (bv #x00000003 32) 'phase)
+                              'in_c_val_rcvd)
+                             (lt* (bv #x0000001f 32) 'in_c_bal_rcvd)))
                            (list
                             (:=*
                              'in_c_val_vals
@@ -559,12 +561,12 @@
                            (list
                             (if*
                              (and*
-                              (bwand* (bv #xffffffe0 32) 'in_a_val_rcvd)
                               (and*
+                               (shr* 'in_b_val_rcvd (bv #x00000005 32))
                                (and*
-                                (bwand* 'in_c_val_rcvd (bv #xffffffe0 32))
-                                (eq* (bv #x00000003 32) 'phase))
-                               (bwand* 'in_b_val_rcvd (bv #xffffffe0 32))))
+                                (lt* (bv #x0000001f 32) 'in_c_val_rcvd)
+                                (eq* (bv #x00000003 32) 'phase)))
+                              (shr* 'in_a_val_rcvd (bv #x00000005 32)))
                              (list
                               (:=* 'a_mbal 'in_a_bal_vals)
                               (:=* 'b_mbal 'in_b_bal_vals)
@@ -575,35 +577,35 @@
                               (:=* 'phase (bv #x00000004 32)))
                              (list
                               (if*
-                               (and*
-                                (shr*
-                                 (and*
-                                  (eq* 'phase (bv #x00000004 32))
-                                  (lt* 'c_mbal (bv #x00000001 32)))
-                                 'b_mbal)
-                                (lt* 'a_mbal (bv #x00000001 32)))
+                               (shr*
+                                (bwand*
+                                 (bwand*
+                                  (eq* (bv #x00000000 32) 'c_mbal)
+                                  (eq* 'phase (bv #x00000004 32)))
+                                 (eq* (bv #x00000000 32) 'b_mbal))
+                                'a_mbal)
                                (list (:=* 'phase (bv #x00000005 32)))
                                (list
                                 (if*
-                                 (and*
-                                  (and*
-                                   (bwor*
-                                    (lt* 'c_mbal 'a_mbal)
-                                    (eq* 'a_mbal 'c_mbal))
-                                   (eq* (bv #x00000004 32) 'phase))
-                                  (or*
-                                   (lt* 'b_mbal 'a_mbal)
-                                   (eq* 'a_mbal 'b_mbal)))
+                                 (bwand*
+                                  (add*
+                                   (eq* 'b_mbal 'a_mbal)
+                                   (lt* 'b_mbal 'a_mbal))
+                                  (bwand*
+                                   (add*
+                                    (eq* 'a_mbal 'c_mbal)
+                                    (lt* 'c_mbal 'a_mbal))
+                                   (eq* 'phase (bv #x00000004 32))))
                                  (list
                                   (:=* 'value 'a_mval)
                                   (:=* 'phase (bv #x00000005 32)))
                                  (list
                                   (if*
                                    (bwand*
-                                    (or*
+                                    (eq* (bv #x00000004 32) 'phase)
+                                    (bwor*
                                      (lt* 'c_mbal 'b_mbal)
-                                     (eq* 'c_mbal 'b_mbal))
-                                    (eq* (bv #x00000004 32) 'phase))
+                                     (eq* 'c_mbal 'b_mbal)))
                                    (list
                                     (:=* 'value 'b_mval)
                                     (:=* 'phase (bv #x00000005 32)))
@@ -615,7 +617,7 @@
                                       (:=* 'phase (bv #x00000005 32)))
                                      (list
                                       (if*
-                                       (eq* (bv #x00000005 32) 'phase)
+                                       (eq* 'phase (bv #x00000005 32))
                                        (list
                                         (:=*
                                          'out_a_bal_sent
@@ -645,18 +647,30 @@
                                        (list
                                         (if*
                                          (and*
-                                          (shl*
-                                           (eq* 'phase (bv #x00000006 32))
-                                           'out_a_bal_sent)
-                                          (eq* (read* 'd1) (read* 'd0)))
+                                          (shr*
+                                           (bv #x00000001 32)
+                                           (bwor*
+                                            (shr* (read* 'd1) (read* 'd0))
+                                            (bwand*
+                                             (lt*
+                                              (read* 'd1)
+                                              (bv #x00000001 32))
+                                             (read* 'd0))))
+                                          (and*
+                                           (eq* (bv #x00000006 32) 'phase)
+                                           (shl*
+                                            (bv #x00000008 32)
+                                            (bwand*
+                                             (bv #xffffffe0 32)
+                                             'out_a_bal_sent))))
                                          (list
                                           (write*
                                            'd2
                                            (bwand*
-                                            (bv #x00000001 32)
                                             (shr*
                                              'out_a_bal_vals
-                                             'out_a_bal_sent)))
+                                             'out_a_bal_sent)
+                                            (bv #x00000001 32)))
                                           (write*
                                            'd0
                                            (lt*
@@ -669,33 +683,29 @@
                                             'out_a_bal_sent)))
                                          (list
                                           (if*
-                                           (bwand*
-                                            (bwand*
-                                             (and*
+                                           (and*
+                                            (bwxor*
+                                             (bv #x00000001 32)
+                                             (bwxor* (read* 'd1) (read* 'd0)))
+                                            (and*
+                                             (bwand*
                                               (eq* (bv #x00000006 32) 'phase)
-                                              (shl*
-                                               (bv #x00000003 32)
-                                               'out_a_val_sent))
-                                             (lt*
-                                              (bv #x0000001f 32)
-                                              'out_a_bal_sent))
-                                            (eq*
-                                             (bwxor*
-                                              (shr* (read* 'd1) (read* 'd0))
-                                              (bwand*
+                                              (add*
+                                               (bv #xffffffff 32)
                                                (lt*
-                                                (read* 'd1)
-                                                (bv #x00000001 32))
-                                               (read* 'd0)))
-                                             (bv #x00000000 32)))
+                                                (bv #x0000001f 32)
+                                                'out_a_val_sent)))
+                                             (shr*
+                                              'out_a_bal_sent
+                                              (bv #x00000005 32))))
                                            (list
                                             (write*
                                              'd2
                                              (bwand*
+                                              (bv #x00000001 32)
                                               (shr*
                                                'out_a_val_vals
-                                               'out_a_val_sent)
-                                              (bv #x00000001 32)))
+                                               'out_a_val_sent)))
                                             (write*
                                              'd0
                                              (lt*
@@ -708,27 +718,23 @@
                                               'out_a_val_sent)))
                                            (list
                                             (if*
-                                             (bwand*
-                                              (and*
-                                               (shr*
-                                                (bv #x00080008 32)
-                                                (bwand*
-                                                 (bv #xffffffe0 32)
-                                                 'out_b_bal_sent))
-                                               (eq* 'phase (bv #x00000006 32)))
+                                             (and*
                                               (shr*
                                                (bv #x00000001 32)
-                                               (add*
-                                                (and*
-                                                 (read* 'd3)
+                                               (bwxor*
+                                                (bwand*
                                                  (lt*
                                                   (read* 'd4)
-                                                  (bv #x00000001 32)))
+                                                  (bv #x00000001 32))
+                                                 (read* 'd3))
                                                 (bwand*
                                                  (read* 'd4)
-                                                 (lt*
+                                                 (bwxor*
                                                   (read* 'd3)
-                                                  (bv #x00000001 32))))))
+                                                  (bv #x00000001 32)))))
+                                              (shl*
+                                               (eq* 'phase (bv #x00000006 32))
+                                               'out_b_bal_sent))
                                              (list
                                               (write*
                                                'd5
@@ -740,7 +746,7 @@
                                               (write*
                                                'd3
                                                (lt*
-                                                (read* 'd3)
+                                                (read* 'd4)
                                                 (bv #x00000001 32)))
                                               (:=*
                                                'out_b_bal_sent
@@ -750,28 +756,18 @@
                                              (list
                                               (if*
                                                (bwand*
+                                                (eq* (read* 'd4) (read* 'd3))
                                                 (and*
-                                                 (shl*
-                                                  (eq*
-                                                   'phase
-                                                   (bv #x00000006 32))
-                                                  'out_b_val_sent)
                                                  (shr*
                                                   'out_b_bal_sent
-                                                  (bv #x00000005 32)))
-                                                (eq*
-                                                 (bwor*
-                                                  (and*
-                                                   (read* 'd3)
-                                                   (lt*
-                                                    (read* 'd4)
-                                                    (bv #x00000001 32)))
-                                                  (bwand*
-                                                   (read* 'd4)
-                                                   (lt*
-                                                    (read* 'd3)
-                                                    (bv #x00000001 32))))
-                                                 (bv #x00000000 32)))
+                                                  (bv #x00000005 32))
+                                                 (and*
+                                                  (eq*
+                                                   (bv #x00000006 32)
+                                                   'phase)
+                                                  (shr*
+                                                   (bv #xc0000008 32)
+                                                   'out_b_val_sent))))
                                                (list
                                                 (write*
                                                  'd5
@@ -783,7 +779,7 @@
                                                 (write*
                                                  'd3
                                                  (lt*
-                                                  (read* 'd3)
+                                                  (read* 'd4)
                                                   (bv #x00000001 32)))
                                                 (:=*
                                                  'out_b_val_sent
@@ -792,19 +788,21 @@
                                                   'out_b_val_sent)))
                                                (list
                                                 (if*
-                                                 (bwand*
-                                                  (and*
-                                                   (shl*
-                                                    (bv #x08000803 32)
-                                                    'out_c_bal_sent)
-                                                   (eq*
-                                                    (bv #x00000006 32)
-                                                    'phase))
-                                                  (shr*
+                                                 (and*
+                                                  (bwxor*
                                                    (bv #x00000001 32)
                                                    (bwxor*
-                                                    (read* 'd6)
-                                                    (read* 'd7))))
+                                                    (shr*
+                                                     (read* 'd6)
+                                                     (read* 'd7))
+                                                    (shr*
+                                                     (read* 'd7)
+                                                     (read* 'd6))))
+                                                  (shl*
+                                                   (eq*
+                                                    'phase
+                                                    (bv #x00000006 32))
+                                                   'out_c_bal_sent))
                                                  (list
                                                   (write*
                                                    'd8
@@ -826,30 +824,26 @@
                                                  (list
                                                   (if*
                                                    (bwand*
+                                                    (and*
+                                                     (shl*
+                                                      (eq*
+                                                       'phase
+                                                       (bv #x00000006 32))
+                                                      'out_c_val_sent)
+                                                     (lt*
+                                                      (bv #x0000001f 32)
+                                                      'out_c_bal_sent))
                                                     (eq*
                                                      (read* 'd7)
-                                                     (read* 'd6))
-                                                    (and*
-                                                     (and*
-                                                      (eq*
-                                                       (bv #x00000006 32)
-                                                       'phase)
-                                                      (shr*
-                                                       (bv #x00000008 32)
-                                                       (bwand*
-                                                        (bv #xffffffe0 32)
-                                                        'out_c_val_sent)))
-                                                     (shr*
-                                                      'out_c_bal_sent
-                                                      (bv #x00000005 32))))
+                                                     (read* 'd6)))
                                                    (list
                                                     (write*
                                                      'd8
                                                      (bwand*
+                                                      (bv #x00000001 32)
                                                       (shr*
                                                        'out_c_val_vals
-                                                       'out_c_val_sent)
-                                                      (bv #x00000001 32)))
+                                                       'out_c_val_sent)))
                                                     (write*
                                                      'd6
                                                      (lt*
@@ -863,20 +857,20 @@
                                                    (list
                                                     (if*
                                                      (and*
-                                                      (shr*
-                                                       'out_a_val_sent
-                                                       (bv #x00000005 32))
                                                       (and*
-                                                       (bwand*
+                                                       (shr*
                                                         'out_b_val_sent
-                                                        (bv #xffffffe0 32))
+                                                        (bv #x00000005 32))
                                                        (and*
-                                                        (shr*
-                                                         'out_c_val_sent
-                                                         (bv #x00000005 32))
                                                         (eq*
                                                          (bv #x00000006 32)
-                                                         'phase))))
+                                                         'phase)
+                                                        (lt*
+                                                         (bv #x0000001f 32)
+                                                         'out_c_val_sent)))
+                                                      (bwand*
+                                                       'out_a_val_sent
+                                                       (bv #xffffffe0 32)))
                                                      (list
                                                       (:=*
                                                        'in_a_bal_rcvd
@@ -920,22 +914,18 @@
                                                      (list
                                                       (if*
                                                        (bwand*
-                                                        (or*
-                                                         (shr*
-                                                          (read* 'd9)
-                                                          (read* 'd10))
-                                                         (shr*
-                                                          (read* 'd10)
-                                                          (read* 'd9)))
-                                                        (and*
+                                                        (bwxor*
+                                                         (read* 'd10)
+                                                         (read* 'd9))
+                                                        (bwand*
                                                          (eq*
-                                                          'phase
-                                                          (bv #x00000007 32))
-                                                         (shr*
-                                                          (bv #x00000008 32)
                                                           (bwand*
                                                            'in_a_bal_rcvd
-                                                           (bv #xffffffe0 32)))))
+                                                           (bv #xffffffe0 32))
+                                                          (bv #x00000000 32))
+                                                         (eq*
+                                                          (bv #x00000007 32)
+                                                          'phase)))
                                                        (list
                                                         (:=*
                                                          'in_a_bal_vals
@@ -962,23 +952,25 @@
                                                          (read* 'd9)))
                                                        (list
                                                         (if*
-                                                         (and*
-                                                          (or*
-                                                           (shr*
-                                                            (read* 'd9)
-                                                            (read* 'd10))
-                                                           (shr*
-                                                            (read* 'd10)
-                                                            (read* 'd9)))
+                                                         (bwand*
                                                           (and*
-                                                           (lt*
-                                                            (bv #x0000001f 32)
-                                                            'in_a_bal_rcvd)
+                                                           (shr*
+                                                            'in_a_bal_rcvd
+                                                            (bv #x00000005 32))
                                                            (shl*
                                                             (eq*
                                                              'phase
                                                              (bv #x00000007 32))
-                                                            'in_a_val_rcvd)))
+                                                            'in_a_val_rcvd))
+                                                          (bwxor*
+                                                           (bwand*
+                                                            (lt*
+                                                             (read* 'd9)
+                                                             (bv #x00000001 32))
+                                                            (read* 'd10))
+                                                           (shr*
+                                                            (read* 'd9)
+                                                            (read* 'd10))))
                                                          (list
                                                           (:=*
                                                            'in_a_val_vals
@@ -1006,22 +998,24 @@
                                                          (list
                                                           (if*
                                                            (and*
-                                                            (or*
-                                                             (shr*
-                                                              (read* 'd12)
-                                                              (read* 'd13))
-                                                             (shr*
-                                                              (read* 'd13)
-                                                              (read* 'd12)))
                                                             (and*
-                                                             (shr*
-                                                              (bv #x00000008 32)
-                                                              (bwand*
-                                                               (bv #xffffffe0 32)
+                                                             (shl*
+                                                              (bv #x80000000 32)
+                                                              (lt*
+                                                               (bv #x0000001f 32)
                                                                'in_b_bal_rcvd))
                                                              (eq*
                                                               (bv #x00000007 32)
-                                                              'phase)))
+                                                              'phase))
+                                                            (or*
+                                                             (bwand*
+                                                              (lt*
+                                                               (read* 'd12)
+                                                               (bv #x00000001 32))
+                                                              (read* 'd13))
+                                                             (shr*
+                                                              (read* 'd12)
+                                                              (read* 'd13))))
                                                            (list
                                                             (:=*
                                                              'in_b_bal_vals
@@ -1034,10 +1028,10 @@
                                                                 'in_b_bal_vals
                                                                 (bv #xffffffff 32)))
                                                               (bwxor*
-                                                               (bv #xffffffff 32)
                                                                (shl*
                                                                 (read* 'd14)
-                                                                'in_b_bal_rcvd))))
+                                                                'in_b_bal_rcvd)
+                                                               (bv #xffffffff 32))))
                                                             (:=*
                                                              'in_b_bal_rcvd
                                                              (add*
@@ -1048,27 +1042,23 @@
                                                              (read* 'd12)))
                                                            (list
                                                             (if*
-                                                             (bwand*
+                                                             (and*
                                                               (and*
                                                                (and*
                                                                 (eq*
-                                                                 (bv #x00000007 32)
-                                                                 'phase)
-                                                                (shl*
-                                                                 (bv #x00000008 32)
+                                                                 'phase
+                                                                 (bv #x00000007 32))
+                                                                (eq*
+                                                                 (bv #x00000000 32)
                                                                  (bwand*
                                                                   'in_b_val_rcvd
                                                                   (bv #xffffffe0 32))))
-                                                               (shr*
+                                                               (bwand*
                                                                 'in_b_bal_rcvd
-                                                                (bv #x00000005 32)))
-                                                              (or*
-                                                               (shr*
-                                                                (read* 'd12)
-                                                                (read* 'd13))
-                                                               (shr*
-                                                                (read* 'd13)
-                                                                (read* 'd12))))
+                                                                (bv #xffffffe0 32)))
+                                                              (bwxor*
+                                                               (read* 'd13)
+                                                               (read* 'd12)))
                                                              (list
                                                               (:=*
                                                                'in_b_val_vals
@@ -1088,37 +1078,34 @@
                                                               (:=*
                                                                'in_b_val_rcvd
                                                                (add*
-                                                                'in_b_val_rcvd
-                                                                (bv #x00000001 32)))
+                                                                (bv #x00000001 32)
+                                                                'in_b_val_rcvd))
                                                               (write*
                                                                'd13
                                                                (read* 'd12)))
                                                              (list
                                                               (if*
-                                                               (and*
-                                                                (shl*
+                                                               (bwand*
+                                                                (and*
                                                                  (eq*
                                                                   (bv #x00000007 32)
                                                                   'phase)
-                                                                 'in_c_bal_rcvd)
-                                                                (or*
-                                                                 (shr*
-                                                                  (read* 'd15)
-                                                                  (read* 'd16))
-                                                                 (shr*
-                                                                  (read* 'd16)
-                                                                  (read*
-                                                                   'd15))))
+                                                                 (shl*
+                                                                  (bv #x20010001 32)
+                                                                  'in_c_bal_rcvd))
+                                                                (bwxor*
+                                                                 (read* 'd15)
+                                                                 (read* 'd16)))
                                                                (list
                                                                 (:=*
                                                                  'in_c_bal_vals
                                                                  (bwxor*
                                                                   (bwxor*
-                                                                   (bv #xffffffff 32)
                                                                    (shl*
                                                                     (read*
                                                                      'd17)
-                                                                    'in_c_bal_rcvd))
+                                                                    'in_c_bal_rcvd)
+                                                                   (bv #xffffffff 32))
                                                                   (bwor*
                                                                    (shl*
                                                                     (bv #x00000001 32)
@@ -1136,41 +1123,46 @@
                                                                  (read* 'd15)))
                                                                (list
                                                                 (if*
-                                                                 (and*
-                                                                  (bwxor*
-                                                                   (read* 'd15)
-                                                                   (read*
-                                                                    'd16))
+                                                                 (bwand*
                                                                   (and*
                                                                    (bwand*
                                                                     'in_c_bal_rcvd
                                                                     (bv #xffffffe0 32))
                                                                    (and*
-                                                                    (shr*
-                                                                     (bv #x00000008 32)
-                                                                     (bwand*
-                                                                      (bv #xffffffe0 32)
-                                                                      'in_c_val_rcvd))
                                                                     (eq*
                                                                      (bv #x00000007 32)
-                                                                     'phase))))
+                                                                     'phase)
+                                                                    (shr*
+                                                                     (bv #xea99d9f2 32)
+                                                                     'in_c_val_rcvd)))
+                                                                  (add*
+                                                                   (shr*
+                                                                    (read*
+                                                                     'd15)
+                                                                    (read*
+                                                                     'd16))
+                                                                   (shr*
+                                                                    (read*
+                                                                     'd16)
+                                                                    (read*
+                                                                     'd15))))
                                                                  (list
                                                                   (:=*
                                                                    'in_c_val_vals
                                                                    (bwxor*
-                                                                    (bwor*
-                                                                     (bwxor*
-                                                                      'in_c_val_vals
-                                                                      (bv #xffffffff 32))
-                                                                     (shl*
-                                                                      (bv #x00000001 32)
-                                                                      'in_c_val_rcvd))
                                                                     (bwxor*
                                                                      (bv #xffffffff 32)
                                                                      (shl*
                                                                       (read*
                                                                        'd17)
-                                                                      'in_c_val_rcvd))))
+                                                                      'in_c_val_rcvd))
+                                                                    (bwor*
+                                                                     (shl*
+                                                                      (bv #x00000001 32)
+                                                                      'in_c_val_rcvd)
+                                                                     (bwxor*
+                                                                      'in_c_val_vals
+                                                                      (bv #xffffffff 32)))))
                                                                   (:=*
                                                                    'in_c_val_rcvd
                                                                    (add*
@@ -1183,20 +1175,20 @@
                                                                  (list
                                                                   (if*
                                                                    (and*
-                                                                    (bwand*
-                                                                     'in_a_val_rcvd
-                                                                     (bv #xffffffe0 32))
                                                                     (and*
                                                                      (and*
+                                                                      (bwand*
+                                                                       'in_c_val_rcvd
+                                                                       (bv #xffffffe0 32))
                                                                       (eq*
-                                                                       'phase
-                                                                       (bv #x00000007 32))
-                                                                      (lt*
-                                                                       (bv #x0000001f 32)
-                                                                       'in_c_val_rcvd))
+                                                                       (bv #x00000007 32)
+                                                                       'phase))
                                                                      (bwand*
                                                                       'in_b_val_rcvd
-                                                                      (bv #xffffffe0 32))))
+                                                                      (bv #xffffffe0 32)))
+                                                                    (shr*
+                                                                     'in_a_val_rcvd
+                                                                     (bv #x00000005 32)))
                                                                    (list
                                                                     (:=*
                                                                      'a_mbal
@@ -1222,17 +1214,17 @@
                                                                    (list
                                                                     (if*
                                                                      (and*
-                                                                      (bwand*
+                                                                      (and*
                                                                        (eq*
                                                                         'b_mval
                                                                         'value)
-                                                                       (bwand*
-                                                                        (eq*
-                                                                         'c_mval
-                                                                         'value)
+                                                                       (and*
                                                                         (eq*
                                                                          (bv #x00000008 32)
-                                                                         'phase)))
+                                                                         'phase)
+                                                                        (eq*
+                                                                         'c_mval
+                                                                         'value)))
                                                                       (eq*
                                                                        'a_mval
                                                                        'value))
@@ -1243,19 +1235,17 @@
                                                                      (list
                                                                       (if*
                                                                        (eq*
-                                                                        (bv #x00000008 32)
-                                                                        'phase)
+                                                                        'phase
+                                                                        (bv #x00000008 32))
                                                                        (list
                                                                         (:=*
                                                                          'phase
                                                                          (bv #x000000ff 32)))
-                                                                       ;; '()
                                                                        (list
                                                                         (if*
                                                                          (bv #xffffffff 32)
                                                                          '()
-                                                                         '()))
-                                                                       )))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+                                                                         '())))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 ;; (print-arduino-program proposer-impl)
 
@@ -1276,12 +1266,29 @@
 ;;   (time (list impl
 ;;               (verify-arduino-prog prog impl))))
 
-;; synth cpu time: 290554 real time: 4019873 gc time: 79792
-;; verify cpu time: 1496362 real time: 1928454 gc time: 1271628
+;; No Memoization
+;; synth cpu time: 1037101 real time: 32281997 gc time: 178246
+;; verify cpu time: 53913 real time: 367426 gc time: 2576
+;; Memoization
+;; synth cpu time: 1083943 real time: 3386467 gc time: 197700
+;; verify cpu time: 54845 real time: 294839 gc time: 2647
+
 ;; (let* ([prog proposer]
 ;;        [impl (time (unity-prog->arduino-prog prog))])
-;;   (time (list impl
-;;               (verify-arduino-prog prog impl))))
+;;   (time (list (verify-arduino-prog prog impl)
+;;               impl)))
+
+;; No Memoization
+;; synth cpu time: 50486 real time: 8512029 gc time: 2729
+;; verify cpu time: 11969 real time: 122229 gc time: 425
+;; Memoziation
+;; synth cpu time: 49962 real time: 4310184 gc time: 2601
+;; verify cpu time: 12749 real time: 92089 gc time: 467
+
+(let* ([prog acceptor]
+       [impl (time (unity-prog->arduino-prog prog))])
+  (time (list (verify-arduino-prog prog impl)
+              impl)))
 
 ;; synth cpu time: 1549185 real time: 7399315 gc time: 270622
 ;; verify cpu time: 100967 real time: 759723 gc time: 6565
@@ -1297,9 +1304,9 @@
 ;;   (list (time (verify-arduino-prog prog impl))
 ;;         impl))
 
-(let* ([prog proposer]
-       [impl proposer-impl])
-  (time (verify-arduino-prog prog impl)))
+;; (let* ([prog proposer]
+;;        [impl proposer-impl])
+;;   (time (verify-arduino-prog prog impl)))
 
 ;; (let* ([prog acceptor]
 ;;        [impl acceptor-impl])

@@ -19,7 +19,7 @@
 (define (try-synth-expr synth-map postulate unity-val extra-snippets)
   (let* ([arduino-cxt (synth-map-target-context synth-map)]
          [arduino-st (synth-map-target-state synth-map)]
-         [val (unity:concretize-val unity-val postulate)]
+         [val (vc-wrapper (unity:concretize-val unity-val postulate))]
          [val-ids (relevant-ids val arduino-st)]
          [snippets (match val
                      [(expression op args ...)

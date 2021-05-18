@@ -69,7 +69,8 @@
            (if (eq? state unity-start-st)
                (guarded-trace guard unity-start-st)
                (guarded-trace guard
-                              (concretize-trace state guard)))))
+                              state))))
+                              ;; (concretize-trace state guard)))))
 
        (define (stobj->guarded-traces stobj)
          (if (union? stobj)
