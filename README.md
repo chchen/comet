@@ -44,7 +44,7 @@ Reactive Program Synthesis by COMposable Execution Traces
 
 #### Paxos with and without memoization
 
-1. Memoization is controlled by the `memoize` boolean defined in `config.rkt`.
+1. Memoization is controlled by the `enable-memoization` boolean defined in `config.rkt`.
 2. Uncomment the specification you wish to synthesize in `paxos-arduino.rkt` or `paxos-verilog.rkt`.
 2. Run the Paxos Arduino harness: `racket paxos-arduino.rkt` or `racket paxos-verilog.rkt`.
 
