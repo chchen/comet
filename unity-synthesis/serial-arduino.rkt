@@ -19,10 +19,10 @@
 ;;  (print-arduino-program
 ;;   (unity-prog->arduino-prog channel-test)))
 
-;; (let* ([prog channel-fifo]
-;;        [impl (time (unity-prog->arduino-prog prog))])
-;;   (list (time (verify-arduino-prog prog impl))
-;;         impl))
+(let* ([prog channel-fifo]
+       [impl (time (unity-prog->arduino-prog prog))])
+  (list (time (verify-arduino-prog prog impl))
+        impl))
 
 ;; (let* ([prog channel-test]
 ;;        [impl (time (unity-prog->arduino-prog prog))])
@@ -48,7 +48,7 @@
 ;;         [synth-map (unity-prog->synth-map prog)])
 ;;    (unity-prog->assign-state prog synth-map)))
 
-(time
- (let* ([prog channel-fifo]
-        [synth-map (unity-prog->synth-map prog)])
-   (unity-prog->synth-traces prog synth-map)))
+;; (time
+;;  (let* ([prog channel-fifo]
+;;         [synth-map (unity-prog->synth-map prog)])
+;;    (unity-prog->synth-traces prog synth-map)))

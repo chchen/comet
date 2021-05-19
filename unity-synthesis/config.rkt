@@ -13,8 +13,14 @@
 
 (error-print-width (expt 2 7))
 
+;; #t / #f
+(define enable-memoization #t)
+
+;; Set bitwidth for Arduino/Verilog models
 (define vect-len 32)
 
+;; Constrains integer theory to bitvectors of size N
 (current-bitwidth 64)
 
-(provide vect-len)
+(provide enable-memoization
+         vect-len)

@@ -1,6 +1,7 @@
 #lang rosette/safe
 
-(require "../util.rkt"
+(require "../config.rkt"
+         "../util.rkt"
          rosette/lib/match)
 
 ;; Types
@@ -233,25 +234,24 @@
 (define unity-example-program
   (unity*
    (declare*
-    (list (cons 'reg 'natural)
-          (cons 'in-read 'boolean)
+    (list (cons 'in-read 'boolean)
           (cons 'in 'recv-channel)
           (cons 'out 'send-channel)
           (cons 'inbox 'recv-buf)
           (cons 'outbox 'send-buf)))
    (initially*
     (list
-     (:=* (list 'reg
-                'in-read
+     (:=* (list 'in-read
                 'inbox
                 'outbox)
           (list 42
                 #f
-                (nat->send-buf* 8 42)
-                (empty-recv-buf* 8)))))
+                (nat->send-buf* vect-len 42)
+                (empty-recv-buf* vect-len)))))
    (assign*
     (list
      ;; non-deterministic choice #1
+     ;; at the moment, COMET synthesizes deterministic specifications only
      (list
       ;; parallel assignment #1a
       (:=* (list 'in-read
@@ -267,10 +267,7 @@
            (case* (list (cons (list #f
                                     'empty)
                               (and* 'in-read
-                                    (full?* 'in)))))))
-     ;; non-deterministic choice #2
-     (list (:=* (list 'reg)
-                (list (+* 'reg 1))))))))
+                                    (full?* 'in)))))))))))
 
 (assert
  (unity*? unity-example-program))
