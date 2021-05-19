@@ -3,35 +3,35 @@ Reactive Program Synthesis by COMposable Execution Traces
 
 ## Repository layout
 * unity-synthesis/: Configuration, specifications, test harnesses
-    * arduino/: Arduino model
-    * bool-bitvec/: Boolean and bitvector language synthesis
-    * unity/: UNITY model
-    * verilog/: Verilog model
+    * `arduino/`: Arduino model
+    * `bool-bitvec/`: Boolean and bitvector language synthesis
+    * `unity/`: UNITY model
+    * `verilog/`: Verilog model
     * ...
     * **Global config**
-    * config.rkt: Global configuration, bitvector length, feature selection
+    * `config.rkt`: Global configuration, bitvector length, feature selection
     * **Paxos**
-    * paxos-arduino.rkt: Harness for Paxos Arduino synthesis
-    * paxos-verilog.rkt: Harness for Paxos Verilog synthesis
-    * paxos.rkt: UNITY specifications for Paxos
+    * `paxos-arduino.rkt`: Harness for Paxos Arduino synthesis
+    * `paxos-verilog.rkt`: Harness for Paxos Verilog synthesis
+    * `paxos.rkt`: UNITY specifications for Paxos
     * **Scalability benchmarks**
-    * batch-sender.rkt
-    * round-robin-sender.rkt
-    * scale-arduino.rkt: Harness for scalability benchmarks
+    * `batch-sender.rkt`
+    * `round-robin-sender.rkt`
+    * `scale-arduino.rkt`: Harness for scalability benchmarks
     * **Serial communication**
-    * serial-arduino.rkt
-    * serial-verilog.rkt
-    * serial.rkt: UNITY specifications for serial communication
+    * `serial-arduino.rkt`
+    * `serial-verilog.rkt`
+    * `serial.rkt`: UNITY specifications for serial communication
     * ...
 
-## Per-model files:
-* backend.rkt: S-expressions to native syntax
-* inversion.rkt: Symbolic syntactic forms
-* mapping.rkt: Refinement mappings
-* semantics.rkt: Expression evalulator and statement interpreter
-* syntax.rkt: Abstract syntax
-* synth.rkt: Synthesis
-* verify.rkt: Post-synthesis verification
+## Per-model files
+* `backend.rkt`: S-expressions to native syntax
+* `inversion.rkt`: Symbolic syntactic forms
+* `mapping.rkt`: Refinement mappings
+* `semantics.rkt`: Expression evalulator and statement interpreter
+* `syntax.rkt`: Abstract syntax
+* `synth.rkt`: Synthesis
+* `verify.rkt`: Post-synthesis verification
 
 ## Getting started
 
