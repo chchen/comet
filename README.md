@@ -36,8 +36,8 @@ Reactive Program Synthesis by COMposable Execution Traces
 ## Getting started
 
 ### Requirements
-* Rosette 4.0 or higher
-* Racket 8.0 or higher
+* <a href = "https://download.racket-lang.org/releases/8.1/">Racket 8.0 or higher</a>
+* Rosette 4.0 or higher -- Once racket is installed, the following command should work: 'raco pkg install rosette'
 * Z3 (included with Rosette distribution)
 
 ### Running the experiments
