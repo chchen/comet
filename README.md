@@ -48,14 +48,18 @@ Reactive Program Synthesis by COMposable Execution Traces
 2. Uncomment the specification you wish to synthesize in `paxos-arduino.rkt` or `paxos-verilog.rkt`.
 2. Run the Paxos harness: `racket paxos-arduino.rkt` or `racket paxos-verilog.rkt`.
 
+Each test harness will synthesize a program, then verify it against the spec. The final output should be a list of (unsat) results, corresponding to each case in the specification, followed by an abstract syntax representation of the synthesized program. Two lines of timing measurements will occur in the output, something like `cpu time: 46437 real time: 9032847 gc time: 2523`, where `real time` shows wall-clock time including time spent waiting for the SMT solver, and `cpu time` shows CPU time used by the Racket runtime.
+
 #### Scalability benchmarks
 
 1. Ensure that memoization is set correctly in `config.rkt`.
 2. Run the scalability benchmarks harness: `racket scale-arduino.rkt`.
 
+The benchmarks harness will the round-robin benchmarks from one to seven channels, then the batch benchmarks, from one to seven channels. The harness will not output the synthesized programs. Timing data will be interspersed in the output, in the same format as listed above.
+
 ### Writing your own specs
 
 1. Take a look at the existing specifications: `serial.rkt`, `paxos.rkt`, `batch-sender.rkt`, and `round-robin-sender.rkt`. In addition, take a look at the UNITY syntax: `unity/syntax.rkt`.
 2. Use one of the existing specifications as scaffolding for writing your own.
-3. Use one of the existing harnesses for targetting Arduino or Verilog.
+3. Use one of the existing harnesses as scaffolding for targetting Arduino or Verilog.
 4. Run it!
